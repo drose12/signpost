@@ -1,0 +1,355 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+
+	"github.com/drose-drcs/signpost/internal/config"
+	"github.com/drose-drcs/signpost/internal/db"
+)
+
+func testServer(t *testing.T) (*Server, *db.DB) {
+	t.Helper()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("opening test db: %v", err)
+	}
+	t.Cleanup(func() { database.Close() })
+
+	gen := config.NewGenerator(
+		filepath.Join(dir, "maddy.conf.tmpl"),
+		filepath.Join(dir, "maddy.conf"),
+		dir,
+	)
+
+	keysDir := filepath.Join(dir, "dkim_keys")
+	srv := NewServer(database, gen, keysDir, "admin", "testpass", nil)
+	return srv, database
+}
+
+func doRequest(t *testing.T, srv *Server, method, path string, body interface{}, auth bool) *httptest.ResponseRecorder {
+	t.Helper()
+	var reqBody *bytes.Buffer
+	if body != nil {
+		b, _ := json.Marshal(body)
+		reqBody = bytes.NewBuffer(b)
+	} else {
+		reqBody = &bytes.Buffer{}
+	}
+
+	req := httptest.NewRequest(method, path, reqBody)
+	req.Header.Set("Content-Type", "application/json")
+	if auth {
+		req.SetBasicAuth("admin", "testpass")
+	}
+
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	return rr
+}
+
+func TestHealthz(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/healthz", nil, false)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]string
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	if resp["status"] != "healthy" {
+		t.Errorf("expected healthy, got %q", resp["status"])
+	}
+}
+
+func TestHealthzNoAuth(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Health check should work without auth
+	rr := doRequest(t, srv, "GET", "/api/v1/healthz", nil, false)
+	if rr.Code != http.StatusOK {
+		t.Errorf("healthz should not require auth, got %d", rr.Code)
+	}
+}
+
+func TestUnauthorized(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/domains", nil, false)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rr.Code)
+	}
+}
+
+func TestWrongCredentials(t *testing.T) {
+	srv, _ := testServer(t)
+
+	req := httptest.NewRequest("GET", "/api/v1/domains", nil)
+	req.SetBasicAuth("admin", "wrongpass")
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for wrong password, got %d", rr.Code)
+	}
+}
+
+func TestDomainCRUD(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// List — empty initially
+	rr := doRequest(t, srv, "GET", "/api/v1/domains", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list domains: %d %s", rr.Code, rr.Body.String())
+	}
+	var domains []db.Domain
+	json.Unmarshal(rr.Body.Bytes(), &domains)
+	if len(domains) != 0 {
+		t.Errorf("expected 0 domains, got %d", len(domains))
+	}
+
+	// Create
+	rr = doRequest(t, srv, "POST", "/api/v1/domains", map[string]string{
+		"name": "drcs.ca",
+	}, true)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create domain: %d %s", rr.Code, rr.Body.String())
+	}
+	var created db.Domain
+	json.Unmarshal(rr.Body.Bytes(), &created)
+	if created.Name != "drcs.ca" {
+		t.Errorf("expected name 'drcs.ca', got %q", created.Name)
+	}
+	if created.DKIMSelector != "signpost" {
+		t.Errorf("expected default selector 'signpost', got %q", created.DKIMSelector)
+	}
+
+	// Get by ID
+	rr = doRequest(t, srv, "GET", "/api/v1/domains/1", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get domain: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Create duplicate — should fail
+	rr = doRequest(t, srv, "POST", "/api/v1/domains", map[string]string{
+		"name": "drcs.ca",
+	}, true)
+	if rr.Code != http.StatusConflict {
+		t.Errorf("expected 409 for duplicate, got %d", rr.Code)
+	}
+
+	// Delete
+	rr = doRequest(t, srv, "DELETE", "/api/v1/domains/1", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("delete domain: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Get deleted — should 404
+	rr = doRequest(t, srv, "GET", "/api/v1/domains/1", nil, true)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for deleted domain, got %d", rr.Code)
+	}
+}
+
+func TestCreateDomainValidation(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Missing name
+	rr := doRequest(t, srv, "POST", "/api/v1/domains", map[string]string{}, true)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing name, got %d", rr.Code)
+	}
+}
+
+func TestGenerateDKIM(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Create a domain first
+	doRequest(t, srv, "POST", "/api/v1/domains", map[string]string{"name": "drcs.ca"}, true)
+
+	// Generate DKIM key
+	rr := doRequest(t, srv, "POST", "/api/v1/domains/1/dkim/generate", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("generate DKIM: %d %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]string
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+
+	if resp["dns_record_name"] != "signpost._domainkey.drcs.ca" {
+		t.Errorf("unexpected DNS record name: %q", resp["dns_record_name"])
+	}
+	if resp["selector"] != "signpost" {
+		t.Errorf("unexpected selector: %q", resp["selector"])
+	}
+}
+
+func TestGenerateDKIMNotFound(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "POST", "/api/v1/domains/999/dkim/generate", nil, true)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestGetDNSRecords(t *testing.T) {
+	srv, _ := testServer(t)
+
+	doRequest(t, srv, "POST", "/api/v1/domains", map[string]string{"name": "drcs.ca"}, true)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/domains/1/dns", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get DNS records: %d %s", rr.Code, rr.Body.String())
+	}
+
+	var records []map[string]string
+	json.Unmarshal(rr.Body.Bytes(), &records)
+
+	// Should have SPF and DMARC at minimum (no DKIM until key is generated)
+	if len(records) < 2 {
+		t.Errorf("expected at least 2 DNS records, got %d", len(records))
+	}
+}
+
+func TestGetDNSRecordsWithDKIM(t *testing.T) {
+	srv, _ := testServer(t)
+
+	doRequest(t, srv, "POST", "/api/v1/domains", map[string]string{"name": "drcs.ca"}, true)
+	doRequest(t, srv, "POST", "/api/v1/domains/1/dkim/generate", nil, true)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/domains/1/dns", nil, true)
+	var records []map[string]string
+	json.Unmarshal(rr.Body.Bytes(), &records)
+
+	// Should have SPF, DMARC, and DKIM
+	if len(records) != 3 {
+		t.Errorf("expected 3 DNS records (SPF + DMARC + DKIM), got %d", len(records))
+	}
+}
+
+func TestRelayConfig(t *testing.T) {
+	srv, _ := testServer(t)
+
+	doRequest(t, srv, "POST", "/api/v1/domains", map[string]string{"name": "drcs.ca"}, true)
+
+	// Get — should return direct by default
+	rr := doRequest(t, srv, "GET", "/api/v1/domains/1/relay", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get relay: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Update
+	host := "smtp.gmail.com"
+	rr = doRequest(t, srv, "PUT", "/api/v1/domains/1/relay", map[string]interface{}{
+		"method":   "gmail",
+		"host":     host,
+		"port":     587,
+		"starttls": true,
+	}, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("update relay: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify update
+	rr = doRequest(t, srv, "GET", "/api/v1/domains/1/relay", nil, true)
+	var rc db.RelayConfig
+	json.Unmarshal(rr.Body.Bytes(), &rc)
+	if rc.Method != "gmail" {
+		t.Errorf("expected method 'gmail', got %q", rc.Method)
+	}
+}
+
+func TestSettings(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Get all
+	rr := doRequest(t, srv, "GET", "/api/v1/settings", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get settings: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Update
+	rr = doRequest(t, srv, "PUT", "/api/v1/settings", map[string]string{
+		"network_trust_cidrs": "10.0.0.0/8",
+	}, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("update settings: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestGetLogs(t *testing.T) {
+	srv, database := testServer(t)
+
+	// Log some entries
+	database.LogMail("test@drcs.ca", "dest@gmail.com", nil, "Test", "sent", nil, nil, true)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/logs", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get logs: %d %s", rr.Code, rr.Body.String())
+	}
+
+	var entries []db.MailLogEntry
+	json.Unmarshal(rr.Body.Bytes(), &entries)
+	if len(entries) != 1 {
+		t.Errorf("expected 1 log entry, got %d", len(entries))
+	}
+}
+
+func TestGetLogsWithFilter(t *testing.T) {
+	srv, database := testServer(t)
+
+	database.LogMail("a@drcs.ca", "b@gmail.com", nil, "Test1", "sent", nil, nil, true)
+	errMsg := "refused"
+	database.LogMail("c@drcs.ca", "d@gmail.com", nil, "Test2", "failed", nil, &errMsg, false)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/logs?status=sent&limit=10", nil, true)
+	var entries []db.MailLogEntry
+	json.Unmarshal(rr.Body.Bytes(), &entries)
+	if len(entries) != 1 {
+		t.Errorf("expected 1 'sent' entry, got %d", len(entries))
+	}
+}
+
+func TestStatus(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/status", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: %d %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	if resp["schema_version"].(float64) != 1 {
+		t.Errorf("unexpected schema version: %v", resp["schema_version"])
+	}
+}
+
+func TestTestSend(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "POST", "/api/v1/test/send", map[string]string{
+		"to": "test@example.com",
+	}, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("test send: %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestTestSendValidation(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "POST", "/api/v1/test/send", map[string]string{}, true)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing 'to', got %d", rr.Code)
+	}
+}
