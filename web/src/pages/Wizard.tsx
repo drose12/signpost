@@ -623,6 +623,19 @@ export function Wizard() {
     );
   }
 
+  async function deleteDomain(domain: Domain) {
+    if (!confirm(`Delete "${domain.name}" and all its config? This cannot be undone.`)) return;
+    try {
+      await api.del(`/domains/${domain.id}`);
+      toast.success(`Deleted ${domain.name}`);
+      const updated = existingDomains.filter((d) => d.id !== domain.id);
+      setExistingDomains(updated);
+      if (updated.length === 0) setStarted(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete domain');
+    }
+  }
+
   function continueWithDomain(domain: Domain) {
     setDomainId(domain.id);
     setDomainName(domain.name);
@@ -674,10 +687,15 @@ export function Wizard() {
                       <span className="text-xs text-amber-600 dark:text-amber-400">No DKIM</span>
                     )}
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => continueWithDomain(domain)}>
-                    Continue setup
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => continueWithDomain(domain)}>
+                      Continue setup
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950" onClick={() => deleteDomain(domain)}>
+                      Delete
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
