@@ -332,24 +332,56 @@ func TestStatus(t *testing.T) {
 	if resp["schema_version"].(float64) != 1 {
 		t.Errorf("unexpected schema version: %v", resp["schema_version"])
 	}
+	// maddy_status should be present; will be "stopped" in test since no Maddy is running
+	if _, ok := resp["maddy_status"]; !ok {
+		t.Errorf("expected maddy_status field in status response")
+	}
+	if resp["maddy_status"] != "stopped" {
+		t.Errorf("expected maddy_status 'stopped' in test, got %q", resp["maddy_status"])
+	}
+	// recent_logs should no longer be present
+	if _, ok := resp["recent_logs"]; ok {
+		t.Errorf("recent_logs should not be present in status response")
+	}
 }
 
 func TestTestSend(t *testing.T) {
 	srv, _ := testServer(t)
 
+	// When Maddy is not running, test send should return 200 with status "failed"
 	rr := doRequest(t, srv, "POST", "/api/v1/test/send", map[string]string{
-		"to": "test@example.com",
+		"from": "test@drcs.ca",
+		"to":   "test@example.com",
 	}, true)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("test send: %d %s", rr.Code, rr.Body.String())
+	}
+	var resp map[string]string
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	// Status will be "failed" since no Maddy is running; that is expected
+	if resp["status"] != "failed" && resp["status"] != "sent" {
+		t.Errorf("expected status 'failed' or 'sent', got %q", resp["status"])
 	}
 }
 
 func TestTestSendValidation(t *testing.T) {
 	srv, _ := testServer(t)
 
+	// Missing both from and to
 	rr := doRequest(t, srv, "POST", "/api/v1/test/send", map[string]string{}, true)
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for missing 'to', got %d", rr.Code)
+	}
+}
+
+func TestTestSendMissingFrom(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Missing from — should return 400
+	rr := doRequest(t, srv, "POST", "/api/v1/test/send", map[string]string{
+		"to": "test@example.com",
+	}, true)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing 'from', got %d", rr.Code)
 	}
 }
