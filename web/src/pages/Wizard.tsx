@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Check,
+  ChevronLeft,
   ChevronRight,
   Globe,
   Key,
@@ -187,10 +188,12 @@ function StepGenerateDkim({
   domainId,
   domainName,
   onComplete,
+  onBack,
 }: {
   domainId: number;
   domainName: string;
   onComplete: (resp: DKIMGenerateResponse) => void;
+  onBack: () => void;
 }) {
   const [generating, setGenerating] = useState(false);
 
@@ -220,10 +223,16 @@ function StepGenerateDkim({
           Generate a DKIM signing key for <strong>{domainName}</strong>. This key will be used to
           cryptographically sign outgoing emails.
         </p>
-        <Button onClick={handleGenerate} disabled={generating}>
-          <Key className="h-4 w-4 mr-2" />
-          {generating ? 'Generating...' : 'Generate DKIM Keys'}
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleGenerate} disabled={generating}>
+            <Key className="h-4 w-4 mr-2" />
+            {generating ? 'Generating...' : 'Generate DKIM Keys'}
+          </Button>
+          <Button variant="outline" onClick={onBack}>
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -259,10 +268,12 @@ function StepDnsRecords({
   domainId,
   onComplete,
   onSkip,
+  onBack,
 }: {
   domainId: number;
   onComplete: () => void;
   onSkip: () => void;
+  onBack: () => void;
 }) {
   return (
     <Card className="dark:bg-slate-800">
@@ -285,6 +296,10 @@ function StepDnsRecords({
           <Button variant="outline" onClick={onSkip}>
             Skip for now
           </Button>
+          <Button variant="outline" onClick={onBack}>
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -295,12 +310,21 @@ function StepDnsRecords({
 // Step 4: Configure Relay
 // ---------------------------------------------------------------------------
 
+const METHOD_HELP: Record<RelayMethod, string> = {
+  gmail: 'To relay through Gmail, you need a Google App Password. Go to myaccount.google.com → Security → 2-Step Verification → App passwords. Create one for "Mail" and paste it below. Your username is your full Gmail address.',
+  isp: 'Use the SMTP server provided by your ISP or hosting provider. Check their documentation for the host, port, and credentials. This is a good option if your ISP allows outbound SMTP.',
+  custom: 'Enter the details for any SMTP server you want to relay through. You\'ll need the hostname, port, and authentication credentials from your mail provider.',
+  direct: '',
+};
+
 function StepConfigureRelay({
   domainId,
   onComplete,
+  onBack,
 }: {
   domainId: number;
   onComplete: () => void;
+  onBack: () => void;
 }) {
   const [method, setMethod] = useState<RelayMethod>('gmail');
   const [host, setHost] = useState('smtp.gmail.com');
@@ -384,13 +408,20 @@ function StepConfigureRelay({
             </Select>
           </div>
 
-          {method === 'direct' && (
+          {method === 'direct' ? (
             <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
               <InfoIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
                 Direct delivery sends mail without a relay. This may fail if your server IP is
                 on blocklists or lacks proper reverse DNS. Consider using Gmail or ISP relay
                 instead.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
+              <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
+                {METHOD_HELP[method]}
               </AlertDescription>
             </Alert>
           )}
@@ -445,10 +476,16 @@ function StepConfigureRelay({
             </>
           )}
 
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save & Continue'}
-            {!saving && <ChevronRight className="h-4 w-4 ml-1" />}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving...' : 'Save & Continue'}
+              {!saving && <ChevronRight className="h-4 w-4 ml-1" />}
+            </Button>
+            <Button variant="outline" onClick={onBack}>
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Back
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -462,9 +499,11 @@ function StepConfigureRelay({
 function StepTestEmail({
   domainName,
   onComplete,
+  onBack,
 }: {
   domainName: string;
   onComplete: () => void;
+  onBack: () => void;
 }) {
   const [to, setTo] = useState('');
   const [from] = useState(`test@${domainName}`);
@@ -528,10 +567,16 @@ function StepTestEmail({
               autoFocus
             />
           </div>
-          <Button type="submit" disabled={sending || !to.trim()}>
-            <Send className="h-4 w-4 mr-2" />
-            {sending ? 'Sending...' : 'Send Test Email'}
-          </Button>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={sending || !to.trim()}>
+              <Send className="h-4 w-4 mr-2" />
+              {sending ? 'Sending...' : 'Send Test Email'}
+            </Button>
+            <Button type="button" variant="outline" onClick={onBack}>
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Back
+            </Button>
+          </div>
         </form>
 
         {result && (
@@ -819,6 +864,7 @@ export function Wizard() {
                   setDkimResponse(resp);
                   completeStep(2);
                 }}
+                onBack={() => setCurrentStep(1)}
               />
             ) : (
               <Card className="dark:bg-slate-800">
@@ -847,6 +893,7 @@ export function Wizard() {
                 domainId={domainId}
                 onComplete={() => completeStep(3)}
                 onSkip={() => completeStep(3)}
+                onBack={() => setCurrentStep(2)}
               />
             ) : (
               <Card className="dark:bg-slate-800">
@@ -874,6 +921,7 @@ export function Wizard() {
               <StepConfigureRelay
                 domainId={domainId}
                 onComplete={() => completeStep(4)}
+                onBack={() => setCurrentStep(3)}
               />
             ) : (
               <Card className="dark:bg-slate-800">
@@ -901,6 +949,7 @@ export function Wizard() {
               <StepTestEmail
                 domainName={domainName}
                 onComplete={() => completeStep(5)}
+                onBack={() => setCurrentStep(4)}
               />
             ) : (
               <Card className="dark:bg-slate-800">
