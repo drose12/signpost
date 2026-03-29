@@ -572,7 +572,7 @@ export function Domains() {
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{selectedDomain.name}</h2>
             </div>
-            <Tabs defaultValue="dns">
+            <Tabs key={selectedDomain.id} defaultValue="dns">
               <TabsList>
                 <TabsTrigger value="dns">DNS Records</TabsTrigger>
                 <TabsTrigger value="relay">Relay Config</TabsTrigger>
