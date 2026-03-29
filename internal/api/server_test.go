@@ -385,3 +385,83 @@ func TestTestSendMissingFrom(t *testing.T) {
 		t.Errorf("expected 400 for missing 'from', got %d", rr.Code)
 	}
 }
+
+func TestDNSCheck(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Create a domain
+	doRequest(t, srv, "POST", "/api/v1/domains", map[string]string{"name": "example.com"}, true)
+
+	// Call the DNS check endpoint
+	rr := doRequest(t, srv, "GET", "/api/v1/domains/1/dns/check", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("dns check: %d %s", rr.Code, rr.Body.String())
+	}
+
+	var resp struct {
+		Records []dnsCheckRecord `json:"records"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+
+	// Should have 3 records: SPF, DKIM, DMARC
+	if len(resp.Records) != 3 {
+		t.Errorf("expected 3 records, got %d", len(resp.Records))
+	}
+
+	// Verify record structure
+	purposes := map[string]bool{}
+	for _, rec := range resp.Records {
+		purposes[rec.Purpose] = true
+		if rec.Type != "TXT" {
+			t.Errorf("expected type 'TXT', got %q", rec.Type)
+		}
+		if rec.Name == "" {
+			t.Error("expected non-empty name")
+		}
+		if rec.Status == "" {
+			t.Error("expected non-empty status")
+		}
+		// Status should be one of the valid values
+		switch rec.Status {
+		case "ok", "missing", "update", "conflict":
+			// valid
+		default:
+			t.Errorf("unexpected status %q for %s", rec.Status, rec.Purpose)
+		}
+	}
+
+	for _, purpose := range []string{"spf", "dkim", "dmarc"} {
+		if !purposes[purpose] {
+			t.Errorf("missing expected purpose %q", purpose)
+		}
+	}
+
+	// DKIM should say "Generate DKIM keys first" since we haven't generated any
+	for _, rec := range resp.Records {
+		if rec.Purpose == "dkim" && rec.Status == "missing" {
+			if rec.Message != "Generate DKIM keys first" {
+				t.Errorf("expected DKIM message about generating keys, got %q", rec.Message)
+			}
+		}
+	}
+}
+
+func TestDNSCheckNotFound(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/domains/999/dns/check", nil, true)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestDNSCheckNoAuth(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/domains/1/dns/check", nil, false)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without auth, got %d", rr.Code)
+	}
+}
