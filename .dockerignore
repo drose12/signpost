@@ -1,0 +1,13 @@
+data/
+.git/
+.github/
+.env
+.env.*
+*.md
+docs/
+web/node_modules/
+web/dist/
+coverage.*
+*.test
+.idea/
+.vscode/

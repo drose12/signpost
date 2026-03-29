@@ -11,8 +11,7 @@ cmd/signpost/signpost
 
 # Node/Frontend
 web/node_modules/
-web/dist/*
-!web/dist/.gitkeep
+web/dist/
 
 # Data directory (runtime state)
 /data/
