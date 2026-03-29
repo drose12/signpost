@@ -1,0 +1,53 @@
+# Binaries
+/signpost
+cmd/signpost/signpost
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+/vendor/
+
+# Node/Frontend
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
+
+# Data directory (runtime state)
+/data/
+
+# Environment files with secrets
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+coverage.out
+coverage.html
+*.test
+
+# Docker
+.docker/
+
+# Superpowers brainstorm sessions
+.superpowers/
+
+# Backup archives
+*.signpost-backup
+
+# TLS keys and certs (generated at runtime)
+*.pem
+*.key
+!templates/**
