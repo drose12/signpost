@@ -332,12 +332,13 @@ func TestStatus(t *testing.T) {
 	if resp["schema_version"].(float64) != 1 {
 		t.Errorf("unexpected schema version: %v", resp["schema_version"])
 	}
-	// maddy_status should be present; will be "stopped" in test since no Maddy is running
-	if _, ok := resp["maddy_status"]; !ok {
+	// maddy_status should be present; value depends on whether port 25 is in use
+	maddyStatus, ok := resp["maddy_status"].(string)
+	if !ok {
 		t.Errorf("expected maddy_status field in status response")
 	}
-	if resp["maddy_status"] != "stopped" {
-		t.Errorf("expected maddy_status 'stopped' in test, got %q", resp["maddy_status"])
+	if maddyStatus != "stopped" && maddyStatus != "running" {
+		t.Errorf("expected maddy_status 'stopped' or 'running', got %q", maddyStatus)
 	}
 	// recent_logs should no longer be present
 	if _, ok := resp["recent_logs"]; ok {

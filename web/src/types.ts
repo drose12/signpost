@@ -66,3 +66,17 @@ export interface TestSendResponse {
   message?: string;
   error?: string;
 }
+
+export interface DNSCheckRecord {
+  type: string;
+  name: string;
+  purpose: string;
+  current: string | null;
+  recommended: string;
+  status: 'ok' | 'missing' | 'update' | 'conflict';
+  message: string;
+}
+
+export interface DNSCheckResponse {
+  records: DNSCheckRecord[];
+}

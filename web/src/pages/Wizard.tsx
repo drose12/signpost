@@ -2,17 +2,15 @@
 import { Fragment, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/api';
-import type { Domain, DNSRecord, DKIMGenerateResponse, TestSendResponse } from '@/types';
+import type { Domain, DKIMGenerateResponse, TestSendResponse } from '@/types';
+import { DnsCheckTable } from '@/components/DnsCheckTable';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Check,
   ChevronRight,
@@ -20,7 +18,6 @@ import {
   Key,
   Send,
   Settings,
-  CopyIcon,
   InfoIcon,
   PlusIcon,
 } from 'lucide-react';
@@ -267,38 +264,6 @@ function StepDnsRecords({
   onComplete: () => void;
   onSkip: () => void;
 }) {
-  const [records, setRecords] = useState<DNSRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    api
-      .get<DNSRecord[]>(`/domains/${domainId}/dns`)
-      .then((data) => {
-        if (!cancelled) {
-          setRecords(data);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          toast.error(err instanceof Error ? err.message : 'Failed to load DNS records');
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [domainId]);
-
-  function copyValue(value: string) {
-    navigator.clipboard
-      .writeText(value)
-      .then(() => toast.success('Copied to clipboard'))
-      .catch(() => toast.error('Copy failed'));
-  }
-
   return (
     <Card className="dark:bg-slate-800">
       <CardContent className="p-6">
@@ -306,64 +271,11 @@ function StepDnsRecords({
           Configure DNS Records
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Add the following records to your DNS provider. Changes can take up to 24-48 hours to
-          propagate.
+          Review your current DNS records against what SignPost recommends. Copy any records that
+          need updating to your DNS provider.
         </p>
 
-        {loading ? (
-          <p className="text-slate-500 dark:text-slate-400 text-sm">Loading DNS records...</p>
-        ) : records.length === 0 ? (
-          <p className="text-slate-500 dark:text-slate-400 text-sm">
-            No DNS records available.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-20">Type</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Value</TableHead>
-                  <TableHead className="w-16" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {records.map((record, i) => (
-                  <TableRow key={i}>
-                    <TableCell>
-                      <Badge variant="outline">{record.type}</Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{record.name}</TableCell>
-                    <TableCell
-                      className="font-mono text-xs max-w-xs truncate"
-                      title={record.value}
-                    >
-                      {record.value}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyValue(record.value)}
-                        aria-label="Copy value"
-                      >
-                        <CopyIcon className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-
-            <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
-              <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
-                Copy each record and add it to your DNS provider (e.g. Cloudflare, Route53).
-                DNS propagation may take time -- you can skip this step and come back later.
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
+        <DnsCheckTable domainId={domainId} />
 
         <div className="flex gap-2 mt-4">
           <Button onClick={onComplete}>
@@ -373,18 +285,6 @@ function StepDnsRecords({
           <Button variant="outline" onClick={onSkip}>
             Skip for now
           </Button>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <Button variant="outline" disabled>
-                    Validate DNS
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Coming soon</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
         </div>
       </CardContent>
     </Card>

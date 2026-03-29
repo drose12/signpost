@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/api';
-import type { Domain, DNSRecord, RelayConfig, DKIMGenerateResponse } from '@/types';
+import type { Domain, RelayConfig, DKIMGenerateResponse } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,91 +11,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { PlusIcon, CopyIcon, InfoIcon, KeyIcon, TrashIcon } from 'lucide-react';
+import { PlusIcon, CopyIcon, KeyIcon, TrashIcon } from 'lucide-react';
+import { DnsCheckTable } from '@/components/DnsCheckTable';
 
 // ---------------------------------------------------------------------------
 // DNS Records Tab
 // ---------------------------------------------------------------------------
 
 function DnsRecordsTab({ domain }: { domain: Domain }) {
-  const [records, setRecords] = useState<DNSRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    api.get<DNSRecord[]>(`/domains/${domain.id}/dns`)
-      .then((data) => { if (!cancelled) { setRecords(data); setLoading(false); } })
-      .catch((err) => {
-        if (!cancelled) {
-          toast.error(err instanceof Error ? err.message : 'Failed to load DNS records');
-          setLoading(false);
-        }
-      });
-    return () => { cancelled = true; };
-  }, [domain.id]);
-
-  function copyValue(value: string) {
-    navigator.clipboard.writeText(value).then(() => toast.success('Copied!')).catch(() => toast.error('Copy failed'));
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800 flex-1">
-          <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
-            DNS changes can take up to 24–48 hours to propagate.
-          </AlertDescription>
-        </Alert>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="ml-4">
-                <Button variant="outline" disabled>Validate DNS</Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Coming soon</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      {loading ? (
-        <p className="text-slate-500 dark:text-slate-400 text-sm">Loading DNS records...</p>
-      ) : records.length === 0 ? (
-        <p className="text-slate-500 dark:text-slate-400 text-sm">No DNS records available. Generate DKIM keys first.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-20">Type</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Value</TableHead>
-              <TableHead className="w-16"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {records.map((record, i) => (
-              <TableRow key={i}>
-                <TableCell><Badge variant="outline">{record.type}</Badge></TableCell>
-                <TableCell className="font-mono text-xs">{record.name}</TableCell>
-                <TableCell className="font-mono text-xs max-w-xs truncate" title={record.value}>{record.value}</TableCell>
-                <TableCell>
-                  <Button variant="ghost" size="icon" onClick={() => copyValue(record.value)} aria-label="Copy value">
-                    <CopyIcon className="h-4 w-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </div>
-  );
+  return <DnsCheckTable domainId={domain.id} />;
 }
 
 // ---------------------------------------------------------------------------
