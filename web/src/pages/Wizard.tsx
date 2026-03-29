@@ -569,7 +569,7 @@ export function Wizard() {
   const [domainName, setDomainName] = useState('');
   const [dkimResponse, setDkimResponse] = useState<DKIMGenerateResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [hasExistingDomains, setHasExistingDomains] = useState(false);
+  const [existingDomains, setExistingDomains] = useState<Domain[]>([]);
   const [started, setStarted] = useState(false);
 
   // First-run detection
@@ -579,7 +579,7 @@ export function Wizard() {
       .get<Domain[]>('/domains')
       .then((domains) => {
         if (!cancelled) {
-          setHasExistingDomains(domains.length > 0);
+          setExistingDomains(domains);
           if (domains.length === 0) {
             setStarted(true);
           }
@@ -623,6 +623,21 @@ export function Wizard() {
     );
   }
 
+  function continueWithDomain(domain: Domain) {
+    setDomainId(domain.id);
+    setDomainName(domain.name);
+    // Mark step 1 as done since domain exists
+    setCompletedSteps((prev) => new Set(prev).add(1));
+    // Skip to step 2 if no DKIM, step 3 if DKIM exists
+    if (domain.dkim_key_path) {
+      setCompletedSteps((prev) => new Set(prev).add(2));
+      setCurrentStep(3);
+    } else {
+      setCurrentStep(2);
+    }
+    setStarted(true);
+  }
+
   // Show intro screen when domains already exist
   if (!started) {
     return (
@@ -630,20 +645,59 @@ export function Wizard() {
         <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">
           Setup Wizard
         </h1>
+
+        {/* Existing domains */}
         <Card className="dark:bg-slate-800">
           <CardContent className="p-6 space-y-4">
             <div className="space-y-2">
               <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-                Set up a new domain
+                Existing domains
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                You already have domains configured. Use this wizard to add and configure a new
-                domain with DKIM signing, DNS records, relay settings, and test email delivery.
+                Continue configuring an existing domain, or add a new one.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {existingDomains.map((domain) => (
+                <div
+                  key={domain.id}
+                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                >
+                  <div className="flex items-center gap-3">
+                    <Globe className="h-4 w-4 text-slate-400" />
+                    <span className="font-medium text-slate-800 dark:text-slate-100">{domain.name}</span>
+                    {domain.dkim_key_path ? (
+                      <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                        <Check className="h-3 w-3" /> DKIM
+                      </span>
+                    ) : (
+                      <span className="text-xs text-amber-600 dark:text-amber-400">No DKIM</span>
+                    )}
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => continueWithDomain(domain)}>
+                    Continue setup
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Add new domain option */}
+        <Card className="dark:bg-slate-800">
+          <CardContent className="p-6 space-y-4">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                Add a new domain
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Set up a new domain with DKIM signing, DNS records, relay settings, and test email delivery.
               </p>
             </div>
             <Button onClick={() => setStarted(true)}>
               <PlusIcon className="h-4 w-4 mr-2" />
-              Start
+              Add new domain
             </Button>
           </CardContent>
         </Card>
@@ -657,7 +711,7 @@ export function Wizard() {
         <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">
           Setup Wizard
         </h1>
-        {!hasExistingDomains && currentStep === 1 && !completedSteps.has(1) && (
+        {existingDomains.length === 0 && currentStep === 1 && !completedSteps.has(1) && (
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Welcome to SignPost! Let's set up your first domain for DKIM-signed email delivery.
           </p>
