@@ -113,7 +113,12 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
                     <Badge variant="outline">{purposeLabel(record.purpose)}</Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="font-mono text-xs text-slate-700 dark:text-slate-300">{record.name}</div>
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono text-xs text-slate-700 dark:text-slate-300">{record.name}</span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyValue(record.name)} aria-label="Copy FQDN">
+                        <CopyIcon className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </TableCell>
                   <TableCell>{statusBadge(record.status)}</TableCell>
                   <TableCell>
