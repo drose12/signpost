@@ -14,6 +14,8 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
   Globe,
   Key,
   Mail,
@@ -318,6 +320,7 @@ function StepConfigureRelay({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [starttls, setStarttls] = useState(defaults.starttls);
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
@@ -428,13 +431,22 @@ function StepConfigureRelay({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="wiz-relay-password">Password</Label>
-                <Input
-                  id="wiz-relay-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={method === 'gmail' ? 'App password' : 'Password'}
-                />
+                <div className="relative">
+                  <Input
+                    id="wiz-relay-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={method === 'gmail' ? 'App password' : 'Password'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <Switch

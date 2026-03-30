@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { PlusIcon, CopyIcon, KeyIcon, TrashIcon } from 'lucide-react';
+import { PlusIcon, CopyIcon, KeyIcon, TrashIcon, Eye, EyeOff } from 'lucide-react';
 import { DnsCheckTable } from '@/components/DnsCheckTable';
 
 // ---------------------------------------------------------------------------
@@ -48,6 +48,7 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [method, setMethod] = useState<RelayMethod>('direct');
   const [host, setHost] = useState('');
   const [port, setPort] = useState('25');
@@ -174,8 +175,17 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="relay-password">Password</Label>
-                <Input id="relay-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                  placeholder={method === 'gmail' ? 'App password' : 'Password'} />
+                <div className="relative">
+                  <Input id="relay-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                    placeholder={method === 'gmail' ? 'App password' : 'Password'} />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <Switch id="relay-starttls" checked={starttls} onCheckedChange={setStarttls} />
