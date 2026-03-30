@@ -281,7 +281,7 @@ function StepChooseMethod({
 // ---------------------------------------------------------------------------
 
 const METHOD_HELP: Record<RelayMethod, string> = {
-  gmail: 'You\'ll need a Google App Password. Go to myaccount.google.com \u2192 Security \u2192 2-Step Verification \u2192 App passwords. Create one for "Mail" and paste it below. Your username is your full Gmail address.',
+  gmail: '',
   isp: 'Enter the SMTP details from your ISP or hosting provider. Check their documentation for the host, port, and credentials.',
   custom: 'Enter the SMTP server details from your email provider. You\'ll need the hostname, port, and authentication credentials.',
   direct: '',
@@ -374,7 +374,11 @@ function StepConfigureRelay({
               <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
                 <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
-                  {METHOD_HELP[method]}
+                  {method === 'gmail' ? (
+                    <>You'll need a Google App Password. Go to <a href="https://myaccount.google.com/security" target="_blank" rel="noopener noreferrer" className="underline font-medium">myaccount.google.com</a> &rarr; Security &rarr; 2-Step Verification &rarr; App passwords. Create one for "Mail" and paste it below. Your username is your full Gmail address.</>
+                  ) : (
+                    METHOD_HELP[method]
+                  )}
                 </AlertDescription>
               </Alert>
 
