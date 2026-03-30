@@ -46,7 +46,9 @@ func main() {
 
 	// Generate initial Maddy config
 	log.Println("Generating Maddy configuration...")
-	if err := configGen.WriteConfig(database, nil); err != nil {
+	// TODO: Replace with real decryption when AES-256-GCM is implemented (Phase 3)
+	passthrough := func(enc, _ string) (string, error) { return enc, nil }
+	if err := configGen.WriteConfig(database, passthrough); err != nil {
 		log.Printf("WARNING: Failed to generate initial config: %v", err)
 	}
 

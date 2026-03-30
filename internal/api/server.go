@@ -134,7 +134,10 @@ func (s *Server) basicAuth(next http.Handler) http.Handler {
 
 // regenerateConfig regenerates the Maddy config and signals Maddy to reload.
 func (s *Server) regenerateConfig() {
-	if err := s.configGen.WriteConfig(s.db, nil); err != nil {
+	// TODO: Replace with real decryption when AES-256-GCM is implemented (Phase 3)
+	// For now, passwords are stored as plaintext — just pass through
+	passthrough := func(enc, _ string) (string, error) { return enc, nil }
+	if err := s.configGen.WriteConfig(s.db, passthrough); err != nil {
 		log.Printf("ERROR: Failed to regenerate config: %v", err)
 		return
 	}
