@@ -110,7 +110,10 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
               {records.map((record) => (
                 <TableRow key={record.purpose}>
                   <TableCell>
-                    <Badge variant="outline">{purposeLabel(record.purpose)}</Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline">{purposeLabel(record.purpose)}</Badge>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">{record.type}</span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
