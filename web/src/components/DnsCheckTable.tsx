@@ -99,9 +99,10 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
             <TableHeader>
               <TableRow>
                 <TableHead className="w-24">Record</TableHead>
+                <TableHead>FQDN</TableHead>
                 <TableHead className="w-32">Status</TableHead>
-                <TableHead>Current</TableHead>
-                <TableHead>Recommended</TableHead>
+                <TableHead>Current Value</TableHead>
+                <TableHead>Recommended Value</TableHead>
                 <TableHead className="w-16"></TableHead>
               </TableRow>
             </TableHeader>
@@ -111,13 +112,13 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
                   <TableCell>
                     <Badge variant="outline">{purposeLabel(record.purpose)}</Badge>
                   </TableCell>
+                  <TableCell>
+                    <div className="font-mono text-xs text-slate-700 dark:text-slate-300">{record.name}</div>
+                  </TableCell>
                   <TableCell>{statusBadge(record.status)}</TableCell>
                   <TableCell>
-                    <div className="space-y-1">
-                      <div className="font-mono text-xs max-w-xs break-all text-slate-600 dark:text-slate-400">
-                        {record.current ?? <span className="italic text-slate-400 dark:text-slate-500">Not found</span>}
-                      </div>
-                      <div className="text-xs text-slate-400 dark:text-slate-500 font-mono">{record.name}</div>
+                    <div className="font-mono text-xs max-w-xs break-all text-slate-600 dark:text-slate-400">
+                      {record.current ?? <span className="italic text-slate-400 dark:text-slate-500">Not found</span>}
                     </div>
                   </TableCell>
                   <TableCell>
