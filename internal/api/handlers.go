@@ -56,12 +56,22 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		maddyStatus = "running"
 	}
 
+	httpPort := envOrDefault("SIGNPOST_HTTP_PORT", "8080")
+	submissionPort := envOrDefault("SIGNPOST_SUBMISSION_PORT", "587")
+
+	listeners := []map[string]string{
+		{"name": "SMTP", "bind": "0.0.0.0:" + smtpPort, "status": maddyStatus},
+		{"name": "Submission", "bind": "0.0.0.0:" + submissionPort, "status": maddyStatus},
+		{"name": "HTTP API", "bind": "0.0.0.0:" + httpPort, "status": "running"},
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"domain_count":    len(domains),
 		"tls_mode":        tlsConfig.Mode,
 		"tls_cert_expiry": tlsConfig.CertExpiry,
 		"schema_version":  version,
 		"maddy_status":    maddyStatus,
+		"listeners":       listeners,
 	})
 }
 

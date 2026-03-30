@@ -46,12 +46,19 @@ export interface DNSRecord {
   description: string;
 }
 
+export interface Listener {
+  name: string;
+  bind: string;
+  status: string;
+}
+
 export interface StatusResponse {
   domain_count: number;
   tls_mode: string;
   tls_cert_expiry?: string;
   schema_version: number;
   maddy_status: string;
+  listeners: Listener[];
 }
 
 export interface DKIMGenerateResponse {

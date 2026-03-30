@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ServerIcon, GlobeIcon, ShieldIcon, InfoIcon } from 'lucide-react';
+import { ServerIcon, GlobeIcon, ShieldIcon, InfoIcon, NetworkIcon } from 'lucide-react';
 
 function formatTime(ts: string): string {
   try {
@@ -106,6 +106,36 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Listeners */}
+      {status?.listeners && status.listeners.length > 0 && (
+        <Card className="dark:bg-slate-800">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">Listeners</CardTitle>
+            <NetworkIcon className="h-4 w-4 text-slate-400" />
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Service</TableHead>
+                  <TableHead>Bind Address</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {status.listeners.map((listener) => (
+                  <TableRow key={listener.name}>
+                    <TableCell className="text-sm font-medium">{listener.name}</TableCell>
+                    <TableCell className="text-sm font-mono text-slate-600 dark:text-slate-400">{listener.bind}</TableCell>
+                    <TableCell><StatusBadge status={listener.status} /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Empty state */}
       {status?.domain_count === 0 && (
