@@ -515,7 +515,7 @@ func (s *Server) handleTestSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send via local SMTP (Maddy on port 25)
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s@signpost>\r\n\r\n%s",
+	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s@signpost>\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
 		req.From, req.To, req.Subject,
 		time.Now().Format(time.RFC1123Z),
 		fmt.Sprintf("%d", time.Now().UnixNano()),
