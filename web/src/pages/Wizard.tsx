@@ -2,7 +2,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/api';
-import type { Domain, DKIMGenerateResponse, TestSendResponse } from '@/types';
+import type { Domain, DKIMGenerateResponse, TestSendResponse, RelayTestResponse } from '@/types';
 import { DnsCheckTable } from '@/components/DnsCheckTable';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -319,6 +319,7 @@ function StepConfigureRelay({
   const [password, setPassword] = useState('');
   const [starttls, setStarttls] = useState(defaults.starttls);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   async function handleSave() {
     setSaving(true);
@@ -338,6 +339,22 @@ function StepConfigureRelay({
       toast.error(msg);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTestConnection() {
+    setTesting(true);
+    try {
+      const result = await api.post<RelayTestResponse>(`/domains/${domainId}/relay/test`);
+      if (result.status === 'ok') {
+        toast.success(result.message || 'Connection successful');
+      } else {
+        toast.error(result.error || 'Connection test failed');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to test connection');
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -432,6 +449,9 @@ function StepConfigureRelay({
                 <Button onClick={handleSave} disabled={saving}>
                   {saving ? 'Saving...' : 'Save & Continue'}
                   {!saving && <ChevronRight className="h-4 w-4 ml-1" />}
+                </Button>
+                <Button variant="outline" onClick={handleTestConnection} disabled={testing}>
+                  {testing ? 'Testing...' : 'Test Connection'}
                 </Button>
                 <Button variant="outline" onClick={onBack}>
                   <ChevronLeft className="h-4 w-4 mr-1" />

@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/api';
-import type { Domain, RelayConfig, DKIMGenerateResponse } from '@/types';
+import type { Domain, RelayConfig, DKIMGenerateResponse, RelayTestResponse } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
 import { PlusIcon, CopyIcon, KeyIcon, TrashIcon } from 'lucide-react';
 import { DnsCheckTable } from '@/components/DnsCheckTable';
 
@@ -47,6 +47,7 @@ const METHOD_DEFAULTS: Record<RelayMethod, { host: string; port: string }> = {
 function RelayConfigTab({ domain }: { domain: Domain }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [method, setMethod] = useState<RelayMethod>('direct');
   const [host, setHost] = useState('');
   const [port, setPort] = useState('25');
@@ -111,6 +112,22 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
     }
   }
 
+  async function handleTestConnection() {
+    setTesting(true);
+    try {
+      const result = await api.post<RelayTestResponse>(`/domains/${domain.id}/relay/test`);
+      if (result.status === 'ok') {
+        toast.success(result.message || 'Connection successful');
+      } else {
+        toast.error(result.error || 'Connection test failed');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to test connection');
+    } finally {
+      setTesting(false);
+    }
+  }
+
   const showFields = method !== 'direct';
 
   return (
@@ -171,16 +188,9 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
             <Button onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : 'Save'}
             </Button>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button variant="outline" disabled>Test Connection</Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Coming soon</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Button variant="outline" onClick={handleTestConnection} disabled={testing}>
+              {testing ? 'Testing...' : 'Test Connection'}
+            </Button>
           </div>
         </>
       )}

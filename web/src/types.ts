@@ -67,6 +67,12 @@ export interface TestSendResponse {
   error?: string;
 }
 
+export interface RelayTestResponse {
+  status: string;
+  message?: string;
+  error?: string;
+}
+
 export interface DNSCheckRecord {
   type: string;
   name: string;

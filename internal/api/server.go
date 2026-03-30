@@ -73,6 +73,7 @@ func (s *Server) buildRouter() chi.Router {
 		// Relay configuration
 		r.Get("/api/v1/domains/{id}/relay", s.handleGetRelay)
 		r.Put("/api/v1/domains/{id}/relay", s.handleUpdateRelay)
+		r.Post("/api/v1/domains/{id}/relay/test", s.handleRelayTest)
 
 		// Settings
 		r.Get("/api/v1/settings", s.handleGetSettings)

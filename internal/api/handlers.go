@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -360,6 +361,120 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, entries)
+}
+
+// handleRelayTest tests connectivity to the configured relay for a domain.
+func (s *Server) handleRelayTest(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid domain ID")
+		return
+	}
+
+	domain, err := s.db.GetDomain(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if domain == nil {
+		writeError(w, http.StatusNotFound, "domain not found")
+		return
+	}
+
+	rc, err := s.db.GetRelayConfig(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if rc == nil || rc.Method == "direct" {
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status":  "ok",
+			"message": "Direct delivery configured — no relay to test",
+		})
+		return
+	}
+
+	if rc.Host == nil || *rc.Host == "" {
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status": "failed",
+			"error":  "No relay host configured",
+		})
+		return
+	}
+
+	addr := net.JoinHostPort(*rc.Host, strconv.Itoa(rc.Port))
+
+	// Step 1: TCP connectivity test
+	conn, dialErr := net.DialTimeout("tcp", addr, 5*time.Second)
+	if dialErr != nil {
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status": "failed",
+			"error":  fmt.Sprintf("Cannot connect to %s: %s", addr, dialErr.Error()),
+		})
+		return
+	}
+	conn.Close()
+
+	// Step 2: If credentials are configured, test SMTP AUTH
+	if rc.Username != nil && *rc.Username != "" && rc.PasswordEnc != nil && *rc.PasswordEnc != "" {
+		// TODO: Replace with real decryption when AES-256-GCM is implemented (Phase 3)
+		// For now, password_enc is stored as plaintext
+		password := *rc.PasswordEnc
+
+		c, smtpErr := smtp.Dial(addr)
+		if smtpErr != nil {
+			writeJSON(w, http.StatusOK, map[string]string{
+				"status": "failed",
+				"error":  fmt.Sprintf("SMTP connection failed: %s", smtpErr.Error()),
+			})
+			return
+		}
+		defer c.Close()
+
+		if err := c.Hello("localhost"); err != nil {
+			writeJSON(w, http.StatusOK, map[string]string{
+				"status": "failed",
+				"error":  fmt.Sprintf("EHLO failed: %s", err.Error()),
+			})
+			return
+		}
+
+		// Upgrade to TLS if STARTTLS is enabled
+		if rc.StartTLS {
+			ok, _ := c.Extension("STARTTLS")
+			if ok {
+				tlsConfig := &tls.Config{ServerName: *rc.Host}
+				if err := c.StartTLS(tlsConfig); err != nil {
+					writeJSON(w, http.StatusOK, map[string]string{
+						"status": "failed",
+						"error":  fmt.Sprintf("STARTTLS failed: %s", err.Error()),
+					})
+					return
+				}
+			}
+		}
+
+		auth := smtp.PlainAuth("", *rc.Username, password, *rc.Host)
+		if err := c.Auth(auth); err != nil {
+			writeJSON(w, http.StatusOK, map[string]string{
+				"status": "failed",
+				"error":  fmt.Sprintf("Authentication failed: %s", err.Error()),
+			})
+			return
+		}
+
+		c.Quit()
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status":  "ok",
+			"message": fmt.Sprintf("Connected and authenticated to %s", addr),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"message": fmt.Sprintf("Connected to %s (no credentials to test)", addr),
+	})
 }
 
 // handleTestSend sends a test email via local SMTP (Maddy).
