@@ -17,24 +17,22 @@ describe('Wizard', () => {
     });
   });
 
-  it('renders all 5 steps', async () => {
+  it('renders all 6 steps', async () => {
     render(
       <BrowserRouter>
         <Wizard />
       </BrowserRouter>
     );
 
-    // Wait for domains fetch to complete and wizard to render.
-    // "Add Domain" appears multiple times (sidebar, heading, button), so wait
-    // for any instance, then verify all step titles are present in the sidebar.
+    // Wait for domains fetch to complete and wizard to render
     await screen.findAllByText('Add Domain', {}, { timeout: 3000 });
 
-    // Each step title appears in the sidebar as a <span> inside a <button>.
-    // Use getAllByText to handle duplicates and verify at least one match each.
+    // Verify all 6 step titles are present in the sidebar
     expect(screen.getAllByText('Add Domain').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Delivery Method')).toBeInTheDocument();
+    expect(screen.getByText('Configure Relay')).toBeInTheDocument();
     expect(screen.getByText('Generate DKIM')).toBeInTheDocument();
     expect(screen.getByText('DNS Records')).toBeInTheDocument();
-    expect(screen.getByText('Configure Relay')).toBeInTheDocument();
     expect(screen.getByText('Send Test Email')).toBeInTheDocument();
   });
 });

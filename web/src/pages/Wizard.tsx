@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -17,7 +16,10 @@ import {
   ChevronRight,
   Globe,
   Key,
+  Mail,
+  Network,
   Send,
+  Server,
   Settings,
   InfoIcon,
   PlusIcon,
@@ -35,20 +37,14 @@ interface StepDef {
 
 const STEPS: StepDef[] = [
   { number: 1, title: 'Add Domain', icon: <Globe className="h-4 w-4" /> },
-  { number: 2, title: 'Generate DKIM', icon: <Key className="h-4 w-4" /> },
-  { number: 3, title: 'DNS Records', icon: <InfoIcon className="h-4 w-4" /> },
-  { number: 4, title: 'Configure Relay', icon: <Settings className="h-4 w-4" /> },
-  { number: 5, title: 'Send Test Email', icon: <Send className="h-4 w-4" /> },
+  { number: 2, title: 'Delivery Method', icon: <Network className="h-4 w-4" /> },
+  { number: 3, title: 'Configure Relay', icon: <Settings className="h-4 w-4" /> },
+  { number: 4, title: 'Generate DKIM', icon: <Key className="h-4 w-4" /> },
+  { number: 5, title: 'DNS Records', icon: <InfoIcon className="h-4 w-4" /> },
+  { number: 6, title: 'Send Test Email', icon: <Send className="h-4 w-4" /> },
 ];
 
 type RelayMethod = 'gmail' | 'isp' | 'direct' | 'custom';
-
-const METHOD_LABELS: Record<RelayMethod, string> = {
-  gmail: 'Gmail SMTP',
-  isp: 'ISP Relay',
-  direct: 'Direct Delivery',
-  custom: 'Custom SMTP',
-};
 
 // ---------------------------------------------------------------------------
 // Step Indicator
@@ -181,53 +177,95 @@ function StepAddDomain({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2: Generate DKIM
+// Step 2: Choose Delivery Method (card picker)
 // ---------------------------------------------------------------------------
 
-function StepGenerateDkim({
-  domainId,
-  domainName,
+interface MethodOption {
+  method: RelayMethod;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  recommended?: boolean;
+}
+
+const METHOD_OPTIONS: MethodOption[] = [
+  {
+    method: 'gmail',
+    title: 'Gmail SMTP Relay',
+    description: 'Send through your Gmail account using an App Password. Best for personal domains and small businesses. Reliable delivery, good reputation.',
+    icon: <Mail className="h-6 w-6" />,
+    recommended: true,
+  },
+  {
+    method: 'isp',
+    title: 'ISP / Hosting Relay',
+    description: 'Use your ISP or hosting provider\'s SMTP server. Good option if your provider offers outbound SMTP with decent deliverability.',
+    icon: <Network className="h-6 w-6" />,
+  },
+  {
+    method: 'custom',
+    title: 'Custom SMTP Server',
+    description: 'Relay through any SMTP server (SendGrid, Mailgun, Amazon SES, etc). Best for high-volume or transactional email.',
+    icon: <Server className="h-6 w-6" />,
+  },
+  {
+    method: 'direct',
+    title: 'Direct Delivery',
+    description: 'Send directly from this server with no relay. Requires a clean IP, proper reverse DNS, and port 25 open. Not recommended for residential IPs.',
+    icon: <Send className="h-6 w-6" />,
+  },
+];
+
+function StepChooseMethod({
   onComplete,
   onBack,
 }: {
-  domainId: number;
-  domainName: string;
-  onComplete: (resp: DKIMGenerateResponse) => void;
+  onComplete: (method: RelayMethod) => void;
   onBack: () => void;
 }) {
-  const [generating, setGenerating] = useState(false);
-
-  async function handleGenerate() {
-    setGenerating(true);
-    try {
-      const result = await api.post<DKIMGenerateResponse>(
-        `/domains/${domainId}/dkim/generate`,
-      );
-      toast.success('DKIM keys generated successfully');
-      onComplete(result);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to generate DKIM keys';
-      toast.error(msg);
-    } finally {
-      setGenerating(false);
-    }
-  }
-
   return (
     <Card className="dark:bg-slate-800">
       <CardContent className="p-6">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">
-          Generate DKIM Keys
+          How should mail be delivered?
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Generate a DKIM signing key for <strong>{domainName}</strong>. This key will be used to
-          cryptographically sign outgoing emails.
+          This determines how SignPost sends outgoing email and what DNS records you'll need.
+          You can change this later on the Domains page.
         </p>
-        <div className="flex gap-2">
-          <Button onClick={handleGenerate} disabled={generating}>
-            <Key className="h-4 w-4 mr-2" />
-            {generating ? 'Generating...' : 'Generate DKIM Keys'}
-          </Button>
+
+        <div className="grid gap-3 max-w-xl">
+          {METHOD_OPTIONS.map((opt) => (
+            <button
+              key={opt.method}
+              type="button"
+              onClick={() => onComplete(opt.method)}
+              className="flex items-start gap-4 p-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950 text-left transition-colors"
+            >
+              <div className="text-slate-400 dark:text-slate-500 mt-0.5 shrink-0">
+                {opt.icon}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-slate-800 dark:text-slate-100">
+                    {opt.title}
+                  </span>
+                  {opt.recommended && (
+                    <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-0.5 rounded-full">
+                      Recommended
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  {opt.description}
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-slate-300 dark:text-slate-600 mt-0.5 shrink-0" />
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4">
           <Button variant="outline" onClick={onBack}>
             <ChevronLeft className="h-4 w-4 mr-1" />
             Back
@@ -239,123 +277,48 @@ function StepGenerateDkim({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 complete summary
-// ---------------------------------------------------------------------------
-
-function DkimSummary({ dkimResponse }: { dkimResponse: DKIMGenerateResponse }) {
-  return (
-    <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1">
-      <div className="flex items-center gap-2">
-        <Key className="h-4 w-4 text-green-500" />
-        <span className="font-medium text-slate-700 dark:text-slate-300">Keys generated</span>
-      </div>
-      <p>
-        <span className="font-medium">Selector:</span> {dkimResponse.selector}
-      </p>
-      <p>
-        <span className="font-medium">Key path:</span>{' '}
-        <span className="font-mono text-xs">{dkimResponse.key_path}</span>
-      </p>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Step 3: DNS Records
-// ---------------------------------------------------------------------------
-
-function StepDnsRecords({
-  domainId,
-  onComplete,
-  onSkip,
-  onBack,
-}: {
-  domainId: number;
-  onComplete: () => void;
-  onSkip: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <Card className="dark:bg-slate-800">
-      <CardContent className="p-6">
-        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">
-          Configure DNS Records
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Review your current DNS records against what SignPost recommends. Copy any records that
-          need updating to your DNS provider.
-        </p>
-
-        <DnsCheckTable domainId={domainId} />
-
-        <div className="flex gap-2 mt-4">
-          <Button onClick={onComplete}>
-            Next
-            <ChevronRight className="h-4 w-4 ml-1" />
-          </Button>
-          <Button variant="outline" onClick={onSkip}>
-            Skip for now
-          </Button>
-          <Button variant="outline" onClick={onBack}>
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Back
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Step 4: Configure Relay
+// Step 3: Configure Relay
 // ---------------------------------------------------------------------------
 
 const METHOD_HELP: Record<RelayMethod, string> = {
-  gmail: 'To relay through Gmail, you need a Google App Password. Go to myaccount.google.com → Security → 2-Step Verification → App passwords. Create one for "Mail" and paste it below. Your username is your full Gmail address.',
-  isp: 'Use the SMTP server provided by your ISP or hosting provider. Check their documentation for the host, port, and credentials. This is a good option if your ISP allows outbound SMTP.',
-  custom: 'Enter the details for any SMTP server you want to relay through. You\'ll need the hostname, port, and authentication credentials from your mail provider.',
+  gmail: 'You\'ll need a Google App Password. Go to myaccount.google.com \u2192 Security \u2192 2-Step Verification \u2192 App passwords. Create one for "Mail" and paste it below. Your username is your full Gmail address.',
+  isp: 'Enter the SMTP details from your ISP or hosting provider. Check their documentation for the host, port, and credentials.',
+  custom: 'Enter the SMTP server details from your email provider. You\'ll need the hostname, port, and authentication credentials.',
   direct: '',
+};
+
+const METHOD_DEFAULTS: Record<RelayMethod, { host: string; port: string; starttls: boolean }> = {
+  gmail: { host: 'smtp.gmail.com', port: '587', starttls: true },
+  isp: { host: '', port: '587', starttls: true },
+  custom: { host: '', port: '587', starttls: true },
+  direct: { host: '', port: '25', starttls: false },
+};
+
+const METHOD_TITLES: Record<RelayMethod, string> = {
+  gmail: 'Gmail SMTP Relay',
+  isp: 'ISP / Hosting Relay',
+  custom: 'Custom SMTP Server',
+  direct: 'Direct Delivery',
 };
 
 function StepConfigureRelay({
   domainId,
+  method,
   onComplete,
   onBack,
 }: {
   domainId: number;
+  method: RelayMethod;
   onComplete: () => void;
   onBack: () => void;
 }) {
-  const [method, setMethod] = useState<RelayMethod>('gmail');
-  const [host, setHost] = useState('smtp.gmail.com');
-  const [port, setPort] = useState('587');
+  const defaults = METHOD_DEFAULTS[method];
+  const [host, setHost] = useState(defaults.host);
+  const [port, setPort] = useState(defaults.port);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [starttls, setStarttls] = useState(true);
+  const [starttls, setStarttls] = useState(defaults.starttls);
   const [saving, setSaving] = useState(false);
-
-  function handleMethodChange(val: string) {
-    const m = val as RelayMethod;
-    setMethod(m);
-    switch (m) {
-      case 'gmail':
-        setHost('smtp.gmail.com');
-        setPort('587');
-        setStarttls(true);
-        break;
-      case 'isp':
-      case 'custom':
-        setHost('');
-        setPort('587');
-        setStarttls(true);
-        break;
-      case 'direct':
-        setHost('');
-        setPort('25');
-        setStarttls(false);
-        break;
-    }
-  }
 
   async function handleSave() {
     setSaving(true);
@@ -378,56 +341,43 @@ function StepConfigureRelay({
     }
   }
 
-  const showFields = method !== 'direct';
-
   return (
     <Card className="dark:bg-slate-800">
       <CardContent className="p-6">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">
-          Configure Relay
+          Configure {METHOD_TITLES[method]}
         </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Choose how outgoing mail is delivered. For most setups, relaying through Gmail or your
-          ISP is recommended.
-        </p>
 
         <div className="space-y-4 max-w-md">
-          <div className="space-y-2">
-            <Label htmlFor="wiz-relay-method">Relay Method</Label>
-            <Select value={method} onValueChange={handleMethodChange}>
-              <SelectTrigger id="wiz-relay-method">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(METHOD_LABELS) as RelayMethod[]).map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {METHOD_LABELS[m]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           {method === 'direct' ? (
-            <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
-              <InfoIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
-                Direct delivery sends mail without a relay. This may fail if your server IP is
-                on blocklists or lacks proper reverse DNS. Consider using Gmail or ISP relay
-                instead.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
-              <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
-                {METHOD_HELP[method]}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {showFields && (
             <>
+              <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
+                <InfoIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
+                  Direct delivery sends mail straight from this server. No relay credentials needed.
+                  Make sure your server IP has good reputation, proper reverse DNS, and port 25 is open.
+                </AlertDescription>
+              </Alert>
+              <div className="flex gap-2">
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving...' : 'Continue'}
+                  {!saving && <ChevronRight className="h-4 w-4 ml-1" />}
+                </Button>
+                <Button variant="outline" onClick={onBack}>
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Back
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
+                <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
+                  {METHOD_HELP[method]}
+                </AlertDescription>
+              </Alert>
+
               <div className="space-y-2">
                 <Label htmlFor="wiz-relay-host">Host</Label>
                 <Input
@@ -473,19 +423,19 @@ function StepConfigureRelay({
                 />
                 <Label htmlFor="wiz-relay-starttls">STARTTLS</Label>
               </div>
+
+              <div className="flex gap-2">
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving ? 'Saving...' : 'Save & Continue'}
+                  {!saving && <ChevronRight className="h-4 w-4 ml-1" />}
+                </Button>
+                <Button variant="outline" onClick={onBack}>
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Back
+                </Button>
+              </div>
             </>
           )}
-
-          <div className="flex gap-2">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save & Continue'}
-              {!saving && <ChevronRight className="h-4 w-4 ml-1" />}
-            </Button>
-            <Button variant="outline" onClick={onBack}>
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              Back
-            </Button>
-          </div>
         </div>
       </CardContent>
     </Card>
@@ -493,7 +443,129 @@ function StepConfigureRelay({
 }
 
 // ---------------------------------------------------------------------------
-// Step 5: Send Test Email
+// Step 4: Generate DKIM
+// ---------------------------------------------------------------------------
+
+function StepGenerateDkim({
+  domainId,
+  domainName,
+  onComplete,
+  onBack,
+}: {
+  domainId: number;
+  domainName: string;
+  onComplete: (resp: DKIMGenerateResponse) => void;
+  onBack: () => void;
+}) {
+  const [generating, setGenerating] = useState(false);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      const result = await api.post<DKIMGenerateResponse>(
+        `/domains/${domainId}/dkim/generate`,
+      );
+      toast.success('DKIM keys generated successfully');
+      onComplete(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to generate DKIM keys';
+      toast.error(msg);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <Card className="dark:bg-slate-800">
+      <CardContent className="p-6">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">
+          Generate DKIM Keys
+        </h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Generate a DKIM signing key for <strong>{domainName}</strong>. This key will be used to
+          cryptographically sign outgoing emails, proving they came from your domain.
+        </p>
+        <div className="flex gap-2">
+          <Button onClick={handleGenerate} disabled={generating}>
+            <Key className="h-4 w-4 mr-2" />
+            {generating ? 'Generating...' : 'Generate DKIM Keys'}
+          </Button>
+          <Button variant="outline" onClick={onBack}>
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DkimSummary({ dkimResponse }: { dkimResponse: DKIMGenerateResponse }) {
+  return (
+    <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1">
+      <div className="flex items-center gap-2">
+        <Key className="h-4 w-4 text-green-500" />
+        <span className="font-medium text-slate-700 dark:text-slate-300">Keys generated</span>
+      </div>
+      <p>
+        <span className="font-medium">Selector:</span> {dkimResponse.selector}
+      </p>
+      <p>
+        <span className="font-medium">Key path:</span>{' '}
+        <span className="font-mono text-xs">{dkimResponse.key_path}</span>
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Step 5: DNS Records
+// ---------------------------------------------------------------------------
+
+function StepDnsRecords({
+  domainId,
+  onComplete,
+  onSkip,
+  onBack,
+}: {
+  domainId: number;
+  onComplete: () => void;
+  onSkip: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <Card className="dark:bg-slate-800">
+      <CardContent className="p-6">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-1">
+          Configure DNS Records
+        </h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Based on your delivery method and DKIM key, here's what your DNS needs to look like.
+          Copy any records that need updating to your DNS provider.
+        </p>
+
+        <DnsCheckTable domainId={domainId} />
+
+        <div className="flex gap-2 mt-4">
+          <Button onClick={onComplete}>
+            Next
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+          <Button variant="outline" onClick={onSkip}>
+            Skip for now
+          </Button>
+          <Button variant="outline" onClick={onBack}>
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Step 6: Send Test Email
 // ---------------------------------------------------------------------------
 
 function StepTestEmail({
@@ -612,6 +684,7 @@ export function Wizard() {
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [domainId, setDomainId] = useState<number | null>(null);
   const [domainName, setDomainName] = useState('');
+  const [relayMethod, setRelayMethod] = useState<RelayMethod | null>(null);
   const [dkimResponse, setDkimResponse] = useState<DKIMGenerateResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [existingDomains, setExistingDomains] = useState<Domain[]>([]);
@@ -644,7 +717,7 @@ export function Wizard() {
 
   function completeStep(step: number) {
     setCompletedSteps((prev) => new Set(prev).add(step));
-    if (step < 5) {
+    if (step < 6) {
       setCurrentStep(step + 1);
     }
   }
@@ -653,19 +726,6 @@ export function Wizard() {
     if (completedSteps.has(stepNumber) || stepNumber === currentStep) {
       setCurrentStep(stepNumber);
     }
-  }
-
-  const allDone = completedSteps.size === 5;
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">
-          Setup Wizard
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm">Loading...</p>
-      </div>
-    );
   }
 
   async function deleteDomain(domain: Domain) {
@@ -684,16 +744,35 @@ export function Wizard() {
   function continueWithDomain(domain: Domain) {
     setDomainId(domain.id);
     setDomainName(domain.name);
-    // Mark step 1 as done since domain exists
-    setCompletedSteps((prev) => new Set(prev).add(1));
-    // Skip to step 2 if no DKIM, step 3 if DKIM exists
+    // Mark step 1 as done
+    const completed = new Set<number>([1]);
+    // Figure out where to resume based on domain state
+    // We don't know relay method from the domain object, so start at step 2
+    let resumeStep = 2;
     if (domain.dkim_key_path) {
-      setCompletedSteps((prev) => new Set(prev).add(2));
-      setCurrentStep(3);
-    } else {
-      setCurrentStep(2);
+      // DKIM exists — they've been through at least step 4
+      // Skip to DNS (step 5) since relay was likely configured
+      completed.add(2);
+      completed.add(3);
+      completed.add(4);
+      resumeStep = 5;
     }
+    setCompletedSteps(completed);
+    setCurrentStep(resumeStep);
     setStarted(true);
+  }
+
+  const allDone = completedSteps.size === 6;
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">
+          Setup Wizard
+        </h1>
+        <p className="text-slate-500 dark:text-slate-400 text-sm">Loading...</p>
+      </div>
+    );
   }
 
   // Show intro screen when domains already exist
@@ -768,6 +847,21 @@ export function Wizard() {
     );
   }
 
+  // Completed step summary helper
+  function completedCard(title: string, detail?: React.ReactNode) {
+    return (
+      <Card className="dark:bg-slate-800">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
+            <Check className="h-5 w-5" />
+            <span className="font-medium">{title}</span>
+          </div>
+          {detail && <div className="text-sm text-slate-600 dark:text-slate-400">{detail}</div>}
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -821,143 +915,104 @@ export function Wizard() {
 
         {/* Step content */}
         <div className="flex-1 min-w-0">
+          {/* Step 1: Add Domain */}
           {currentStep === 1 && (
-            completedSteps.has(1) ? (
-              <Card className="dark:bg-slate-800">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
-                    <Check className="h-5 w-5" />
-                    <span className="font-medium">Domain added</span>
-                  </div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    <strong>{domainName}</strong> has been created.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <StepAddDomain
-                onComplete={(id, name) => {
-                  setDomainId(id);
-                  setDomainName(name);
-                  completeStep(1);
-                }}
-              />
-            )
+            completedSteps.has(1)
+              ? completedCard('Domain added', <p><strong>{domainName}</strong> has been created.</p>)
+              : <StepAddDomain
+                  onComplete={(id, name) => {
+                    setDomainId(id);
+                    setDomainName(name);
+                    completeStep(1);
+                  }}
+                />
           )}
 
+          {/* Step 2: Choose Delivery Method */}
           {currentStep === 2 && (
-            completedSteps.has(2) ? (
-              <Card className="dark:bg-slate-800">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
-                    <Check className="h-5 w-5" />
-                    <span className="font-medium">DKIM keys generated</span>
-                  </div>
-                  {dkimResponse && <DkimSummary dkimResponse={dkimResponse} />}
-                </CardContent>
-              </Card>
-            ) : domainId ? (
-              <StepGenerateDkim
-                domainId={domainId}
-                domainName={domainName}
-                onComplete={(resp) => {
-                  setDkimResponse(resp);
-                  completeStep(2);
-                }}
-                onBack={() => setCurrentStep(1)}
-              />
-            ) : (
-              <Card className="dark:bg-slate-800">
-                <CardContent className="p-6 text-slate-500 dark:text-slate-400 text-sm">
-                  Complete step 1 first.
-                </CardContent>
-              </Card>
-            )
+            completedSteps.has(2)
+              ? completedCard('Delivery method chosen', <p>{relayMethod ? METHOD_TITLES[relayMethod] : 'Method selected'}</p>)
+              : <StepChooseMethod
+                  onComplete={(method) => {
+                    setRelayMethod(method);
+                    completeStep(2);
+                  }}
+                  onBack={() => setCurrentStep(1)}
+                />
           )}
 
+          {/* Step 3: Configure Relay */}
           {currentStep === 3 && (
-            completedSteps.has(3) ? (
-              <Card className="dark:bg-slate-800">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
-                    <Check className="h-5 w-5" />
-                    <span className="font-medium">DNS records reviewed</span>
-                  </div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    DNS records are available on the Domains page.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : domainId ? (
-              <StepDnsRecords
-                domainId={domainId}
-                onComplete={() => completeStep(3)}
-                onSkip={() => completeStep(3)}
-                onBack={() => setCurrentStep(2)}
-              />
-            ) : (
-              <Card className="dark:bg-slate-800">
-                <CardContent className="p-6 text-slate-500 dark:text-slate-400 text-sm">
-                  Complete earlier steps first.
-                </CardContent>
-              </Card>
-            )
+            completedSteps.has(3)
+              ? completedCard('Relay configured', <p>Settings saved. You can adjust them on the Domains page.</p>)
+              : domainId && relayMethod
+                ? <StepConfigureRelay
+                    domainId={domainId}
+                    method={relayMethod}
+                    onComplete={() => completeStep(3)}
+                    onBack={() => setCurrentStep(2)}
+                  />
+                : <Card className="dark:bg-slate-800">
+                    <CardContent className="p-6 text-slate-500 dark:text-slate-400 text-sm">
+                      Complete earlier steps first.
+                    </CardContent>
+                  </Card>
           )}
 
+          {/* Step 4: Generate DKIM */}
           {currentStep === 4 && (
-            completedSteps.has(4) ? (
-              <Card className="dark:bg-slate-800">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
-                    <Check className="h-5 w-5" />
-                    <span className="font-medium">Relay configured</span>
-                  </div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Relay settings saved. You can adjust them on the Domains page.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : domainId ? (
-              <StepConfigureRelay
-                domainId={domainId}
-                onComplete={() => completeStep(4)}
-                onBack={() => setCurrentStep(3)}
-              />
-            ) : (
-              <Card className="dark:bg-slate-800">
-                <CardContent className="p-6 text-slate-500 dark:text-slate-400 text-sm">
-                  Complete earlier steps first.
-                </CardContent>
-              </Card>
-            )
+            completedSteps.has(4)
+              ? completedCard('DKIM keys generated', dkimResponse && <DkimSummary dkimResponse={dkimResponse} />)
+              : domainId
+                ? <StepGenerateDkim
+                    domainId={domainId}
+                    domainName={domainName}
+                    onComplete={(resp) => {
+                      setDkimResponse(resp);
+                      completeStep(4);
+                    }}
+                    onBack={() => setCurrentStep(3)}
+                  />
+                : <Card className="dark:bg-slate-800">
+                    <CardContent className="p-6 text-slate-500 dark:text-slate-400 text-sm">
+                      Complete earlier steps first.
+                    </CardContent>
+                  </Card>
           )}
 
+          {/* Step 5: DNS Records */}
           {currentStep === 5 && (
-            completedSteps.has(5) ? (
-              <Card className="dark:bg-slate-800">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-2">
-                    <Check className="h-5 w-5" />
-                    <span className="font-medium">Test email sent</span>
-                  </div>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    Setup is complete for <strong>{domainName}</strong>.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : domainName ? (
-              <StepTestEmail
-                domainName={domainName}
-                onComplete={() => completeStep(5)}
-                onBack={() => setCurrentStep(4)}
-              />
-            ) : (
-              <Card className="dark:bg-slate-800">
-                <CardContent className="p-6 text-slate-500 dark:text-slate-400 text-sm">
-                  Complete earlier steps first.
-                </CardContent>
-              </Card>
-            )
+            completedSteps.has(5)
+              ? completedCard('DNS records reviewed', <p>DNS records are available on the Domains page.</p>)
+              : domainId
+                ? <StepDnsRecords
+                    domainId={domainId}
+                    onComplete={() => completeStep(5)}
+                    onSkip={() => completeStep(5)}
+                    onBack={() => setCurrentStep(4)}
+                  />
+                : <Card className="dark:bg-slate-800">
+                    <CardContent className="p-6 text-slate-500 dark:text-slate-400 text-sm">
+                      Complete earlier steps first.
+                    </CardContent>
+                  </Card>
+          )}
+
+          {/* Step 6: Send Test Email */}
+          {currentStep === 6 && (
+            completedSteps.has(6)
+              ? completedCard('Test email sent', <p>Setup is complete for <strong>{domainName}</strong>.</p>)
+              : domainName
+                ? <StepTestEmail
+                    domainName={domainName}
+                    onComplete={() => completeStep(6)}
+                    onBack={() => setCurrentStep(5)}
+                  />
+                : <Card className="dark:bg-slate-800">
+                    <CardContent className="p-6 text-slate-500 dark:text-slate-400 text-sm">
+                      Complete earlier steps first.
+                    </CardContent>
+                  </Card>
           )}
         </div>
       </div>
