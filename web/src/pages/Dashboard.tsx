@@ -35,6 +35,7 @@ function statusVariant(status: string): 'default' | 'destructive' | 'secondary' 
 function TestEmailCard() {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [selectedDomain, setSelectedDomain] = useState('');
+  const [fromUser, setFromUser] = useState('test');
   const [to, setTo] = useState('');
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<TestSendResponse | null>(null);
@@ -52,8 +53,9 @@ function TestEmailCard() {
     setSending(true);
     setResult(null);
     try {
+      const fromAddr = `${fromUser.trim() || 'test'}@${selectedDomain}`;
       const resp = await api.post<TestSendResponse>('/test/send', {
-        from: `test@${selectedDomain}`,
+        from: fromAddr,
         to: to.trim(),
         subject: 'SignPost Test Email',
         body: `This is a test email sent from SignPost for domain ${selectedDomain}.`,
@@ -81,18 +83,28 @@ function TestEmailCard() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSend} className="flex items-end gap-3 flex-wrap">
-          <div className="space-y-1.5 min-w-[140px]">
-            <Label htmlFor="test-from-domain" className="text-xs">From domain</Label>
-            <Select value={selectedDomain} onValueChange={setSelectedDomain}>
-              <SelectTrigger id="test-from-domain" className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {domains.map((d) => (
-                  <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-1.5">
+            <Label htmlFor="test-from-user" className="text-xs">From</Label>
+            <div className="flex items-center">
+              <Input
+                id="test-from-user"
+                value={fromUser}
+                onChange={(e) => setFromUser(e.target.value)}
+                placeholder="test"
+                className="h-9 rounded-r-none w-[120px]"
+              />
+              <span className="h-9 flex items-center px-2 border border-l-0 rounded-r-md bg-slate-100 dark:bg-slate-700 text-sm text-slate-500 dark:text-slate-400">@</span>
+              <Select value={selectedDomain} onValueChange={setSelectedDomain}>
+                <SelectTrigger className="h-9 rounded-l-none border-l-0 min-w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {domains.map((d) => (
+                    <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="space-y-1.5 flex-1 min-w-[200px]">
             <Label htmlFor="test-to" className="text-xs">To</Label>
@@ -114,7 +126,7 @@ function TestEmailCard() {
         {result && (
           <div className="mt-3">
             {result.status === 'sent' || result.status === 'queued' ? (
-              <p className="text-sm text-green-600 dark:text-green-400">Sent as test@{selectedDomain}</p>
+              <p className="text-sm text-green-600 dark:text-green-400">Sent as {fromUser.trim() || 'test'}@{selectedDomain}</p>
             ) : (
               <p className="text-sm text-red-500">{result.error}</p>
             )}
