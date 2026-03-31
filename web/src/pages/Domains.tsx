@@ -850,9 +850,27 @@ export function Domains() {
     setSelectedId(domain.id);
   }
 
+  const [deleteTarget, setDeleteTarget] = useState<Domain | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   function handleDeleted() {
     setDomains((prev) => prev.filter((d) => d.id !== selectedId));
     setSelectedId(null);
+  }
+
+  async function handleDeleteDomain(domain: Domain) {
+    setDeleting(true);
+    try {
+      await api.del(`/domains/${domain.id}`);
+      toast.success(`Deleted ${domain.name}`);
+      setDomains((prev) => prev.filter((d) => d.id !== domain.id));
+      if (selectedId === domain.id) setSelectedId(null);
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function handleRefresh() {
@@ -908,13 +926,7 @@ export function Domains() {
                     className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm(`Delete "${domain.name}"? This cannot be undone.`)) {
-                        api.del(`/domains/${domain.id}`).then(() => {
-                          toast.success(`Deleted ${domain.name}`);
-                          handleDeleted();
-                          fetchDomains();
-                        }).catch((err) => toast.error(err instanceof Error ? err.message : 'Delete failed'));
-                      }
+                      setDeleteTarget(domain);
                     }}
                   >
                     <TrashIcon className="h-4 w-4" />
@@ -938,6 +950,24 @@ export function Domains() {
       )}
 
       <AddDomainDialog open={addOpen} onOpenChange={setAddOpen} onCreated={handleCreated} />
+
+      {/* Delete domain confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Domain</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This will remove all relay configuration, DKIM keys, and DNS records associated with this domain. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteTarget && handleDeleteDomain(deleteTarget)} disabled={deleting}>
+              {deleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
