@@ -103,6 +103,9 @@ func (s *Server) handleCreateSMTPUser(w http.ResponseWriter, r *http.Request) {
 		s.db.SetSetting("submission_enabled", "true")
 	}
 
+	// Checkpoint WAL so Maddy's auth.pass_table can read the new user
+	s.db.Checkpoint()
+
 	go s.regenerateConfig()
 	writeJSON(w, http.StatusCreated, user)
 }
@@ -126,6 +129,7 @@ func (s *Server) handleDeleteSMTPUser(w http.ResponseWriter, r *http.Request) {
 		s.db.SetSetting("submission_enabled", "false")
 	}
 
+	s.db.Checkpoint()
 	go s.regenerateConfig()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
@@ -175,6 +179,7 @@ func (s *Server) handleUpdateSMTPUserPassword(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	s.db.Checkpoint()
 	go s.regenerateConfig()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }

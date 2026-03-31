@@ -91,6 +91,13 @@ func (db *DB) migrate() error {
 	return nil
 }
 
+// Checkpoint forces a WAL checkpoint so other processes (like Maddy's auth.pass_table)
+// can read the latest data from the SQLite database.
+func (db *DB) Checkpoint() error {
+	_, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+	return err
+}
+
 // CheckIntegrity runs SQLite's integrity check and returns any errors found.
 func (db *DB) CheckIntegrity() error {
 	var result string
