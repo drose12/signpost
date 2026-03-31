@@ -26,6 +26,7 @@ import {
   Settings,
   InfoIcon,
   PlusIcon,
+  Trash2,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -886,8 +887,8 @@ export function Wizard() {
                       Continue setup
                       <ChevronRight className="h-4 w-4 ml-1" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950" onClick={() => deleteDomain(domain)}>
-                      Delete
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950" onClick={() => deleteDomain(domain)}>
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

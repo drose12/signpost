@@ -152,10 +152,10 @@ function RelayMethodCard({
           <div className="flex gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-amber-800 dark:text-amber-300">
-              <strong>Maddy limitation:</strong> This relay requires LOGIN authentication which Maddy
-              doesn't support. Mail sent from the web UI works (Go handles it directly),
-              but mail from external clients via port 587 will be delivered directly
-              from your server IP instead of through this relay.
+              <strong>LOGIN auth relay:</strong> Mail is always DKIM signed. Web UI sends use Go
+              to relay through this ISP with LOGIN auth. External clients (port 587) go through
+              Maddy which can't do LOGIN — those emails are DKIM signed but delivered directly
+              from your server IP (SPF may not pass unless your IP is in the SPF record).
             </p>
           </div>
         </div>
