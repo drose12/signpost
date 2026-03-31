@@ -279,6 +279,8 @@ func checkDMARC(domainName string, lookupTXT dnsLookupFunc) dnsCheckRecord {
 }
 
 // spfMechanismForRelay returns the SPF mechanism needed for the configured relay.
+// For ISP/custom relays, it checks whether the host publishes an SPF record.
+// If not, it resolves the host to an IP and returns ip4: instead of include:.
 func spfMechanismForRelay(relay *db.RelayConfig) string {
 	if relay == nil {
 		return ""
@@ -287,12 +289,27 @@ func spfMechanismForRelay(relay *db.RelayConfig) string {
 	case "gmail":
 		return "include:_spf.google.com"
 	case "custom", "isp":
-		if relay.Host != nil && *relay.Host != "" {
-			return "include:" + *relay.Host
+		if relay.Host == nil || *relay.Host == "" {
+			return ""
 		}
-		return ""
+		host := *relay.Host
+		// Check if the host has an SPF record (include: requires one)
+		txts, err := defaultLookupTXT(host)
+		if err == nil {
+			for _, txt := range txts {
+				if strings.HasPrefix(txt, "v=spf1") {
+					return "include:" + host
+				}
+			}
+		}
+		// No SPF record on host — resolve to IP and use ip4:
+		ips, err := net.LookupHost(host)
+		if err == nil && len(ips) > 0 {
+			return "ip4:" + ips[0]
+		}
+		// Fallback to include: even though it may not work
+		return "include:" + host
 	default:
-		// "direct" or unknown
 		return ""
 	}
 }
