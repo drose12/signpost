@@ -373,6 +373,30 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, entries)
 }
 
+// loginAuth implements smtp.Auth for the LOGIN mechanism.
+// Many ISP mail servers only support LOGIN, not PLAIN.
+type loginAuth struct {
+	username, password string
+}
+
+func (a *loginAuth) Start(server *smtp.ServerInfo) (string, []byte, error) {
+	return "LOGIN", nil, nil
+}
+
+func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
+	if !more {
+		return nil, nil
+	}
+	prompt := string(fromServer)
+	if prompt == "Username:" || prompt == "VXNlcm5hbWU6" {
+		return []byte(a.username), nil
+	}
+	if prompt == "Password:" || prompt == "UGFzc3dvcmQ6" {
+		return []byte(a.password), nil
+	}
+	return nil, fmt.Errorf("unexpected LOGIN prompt: %s", prompt)
+}
+
 // handleRelayTest tests connectivity to the configured relay for a domain.
 func (s *Server) handleRelayTest(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -464,11 +488,39 @@ func (s *Server) handleRelayTest(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		auth := smtp.PlainAuth("", *rc.Username, password, *rc.Host)
-		if err := c.Auth(auth); err != nil {
+		// Try PLAIN auth first, fall back to LOGIN if it fails
+		plainAuth := smtp.PlainAuth("", *rc.Username, password, *rc.Host)
+		authErr := c.Auth(plainAuth)
+		if authErr != nil {
+			// PLAIN failed — try LOGIN (many ISP servers only support LOGIN)
+			c.Quit()
+			c2, err2 := smtp.Dial(addr)
+			if err2 != nil {
+				writeJSON(w, http.StatusOK, map[string]string{
+					"status": "failed",
+					"error":  fmt.Sprintf("PLAIN auth failed: %s (LOGIN retry connect failed)", authErr.Error()),
+				})
+				return
+			}
+			defer c2.Close()
+			c2.Hello("localhost")
+			if rc.StartTLS {
+				if ok, _ := c2.Extension("STARTTLS"); ok {
+					c2.StartTLS(&tls.Config{ServerName: *rc.Host})
+				}
+			}
+			loginA := &loginAuth{username: *rc.Username, password: password}
+			if err2 := c2.Auth(loginA); err2 != nil {
+				writeJSON(w, http.StatusOK, map[string]string{
+					"status": "failed",
+					"error":  fmt.Sprintf("Authentication failed (tried PLAIN and LOGIN): PLAIN: %s / LOGIN: %s", authErr.Error(), err2.Error()),
+				})
+				return
+			}
+			c2.Quit()
 			writeJSON(w, http.StatusOK, map[string]string{
-				"status": "failed",
-				"error":  fmt.Sprintf("Authentication failed: %s", err.Error()),
+				"status":  "ok",
+				"message": fmt.Sprintf("Connected and authenticated to %s (LOGIN auth)", addr),
 			})
 			return
 		}
