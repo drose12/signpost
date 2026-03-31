@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/drose-drcs/signpost/internal/config"
+	"github.com/drose-drcs/signpost/internal/crypto"
 	"github.com/drose-drcs/signpost/internal/db"
 )
 
@@ -23,17 +24,27 @@ type Server struct {
 	router    chi.Router
 	adminUser string
 	adminPass string
-	webFS     fs.FS // embedded frontend, nil in dev
+	encKey    []byte // AES-256 key derived from SIGNPOST_SECRET_KEY
+	webFS     fs.FS  // embedded frontend, nil in dev
 }
 
 // NewServer creates a new API server.
-func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser, adminPass string, webFS fs.FS) *Server {
+func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser, adminPass, secretKey string, webFS fs.FS) *Server {
+	var encKey []byte
+	if secretKey != "" {
+		var err error
+		encKey, err = crypto.DeriveKey(secretKey)
+		if err != nil {
+			log.Fatalf("Failed to derive encryption key: %v", err)
+		}
+	}
 	s := &Server{
 		db:        database,
 		configGen: configGen,
 		keysDir:   keysDir,
 		adminUser: adminUser,
 		adminPass: adminPass,
+		encKey:    encKey,
 		webFS:     webFS,
 	}
 	s.router = s.buildRouter()
@@ -133,12 +144,28 @@ func (s *Server) basicAuth(next http.Handler) http.Handler {
 	})
 }
 
+// decryptRelayPassword decrypts an encrypted relay password.
+// If no encryption key is configured, it assumes plaintext (migration path).
+// If decryption fails and the nonce is "placeholder-nonce", it treats the
+// value as plaintext (graceful migration from pre-encryption data).
+func (s *Server) decryptRelayPassword(enc, nonce string) (string, error) {
+	if s.encKey == nil {
+		return enc, nil
+	}
+	plaintext, err := crypto.Decrypt(s.encKey, enc, nonce)
+	if err != nil {
+		// Fallback: if nonce is the old placeholder, treat as plaintext
+		if nonce == "placeholder-nonce" {
+			return enc, nil
+		}
+		return "", err
+	}
+	return plaintext, nil
+}
+
 // regenerateConfig regenerates the Maddy config and signals Maddy to reload.
 func (s *Server) regenerateConfig() {
-	// TODO: Replace with real decryption when AES-256-GCM is implemented (Phase 3)
-	// For now, passwords are stored as plaintext — just pass through
-	passthrough := func(enc, _ string) (string, error) { return enc, nil }
-	if err := s.configGen.WriteConfig(s.db, passthrough); err != nil {
+	if err := s.configGen.WriteConfig(s.db, s.decryptRelayPassword); err != nil {
 		log.Printf("ERROR: Failed to regenerate config: %v", err)
 		return
 	}

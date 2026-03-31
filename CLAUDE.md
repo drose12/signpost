@@ -1,0 +1,133 @@
+# SignPost
+
+A Docker-based local SMTP relay that DKIM-signs outgoing mail and relays through a configurable smarthost.
+
+## Project Overview
+
+- **What:** Local SMTP server with DKIM signing, web admin UI, DNS validation tools
+- **Why:** Local services get email rejected due to DKIM/SPF/DMARC requirements
+- **Stack:** Maddy (mail server) + Go (backend API) + React/Vite/Tailwind/shadcn (frontend) + SQLite
+- **Container:** Single Docker container with s6-overlay managing Maddy + Go web app
+- **Owner:** drose, domain drcs.ca on Cloudflare DNS, Gmail-hosted email
+- **Prod server:** root@ubuntu01.drcs.ca
+- **Repo:** github.com/drose-drcs/signpost (private)
+
+## Key Files
+
+- `docs/superpowers/specs/2026-03-29-signpost-design.md` — **full design spec** (architecture, API surface, DB schema, all features, implementation phases)
+- `templates/maddy.conf.tmpl` — Go template that generates Maddy's config
+- `internal/db/` — SQLite schema, migrations, domain/relay/settings/maillog queries
+- `internal/config/` — Maddy config generator (reads DB → renders template → writes file)
+- `internal/api/` — REST API handlers (chi router, basic auth)
+- `internal/crypto/` — AES-256-GCM encryption for relay credentials (HKDF-SHA256 key derivation)
+- `internal/dkim/` — DKIM key generation (RSA 2048, PKCS#8 PEM) and DNS record builders
+- `cmd/signpost/main.go` — entrypoint (initializes DB, generates config, starts HTTP server)
+- `web/` — React frontend (not yet built, Phase 2)
+- `rootfs/` — s6-overlay service definitions for container process management
+- `Dockerfile` — multi-stage build (Go builder → foxcpp/maddy:0.9.2 + s6-overlay)
+
+## Development
+
+```bash
+# Go is at /usr/local/go/bin (add to PATH if needed)
+export PATH=$PATH:/usr/local/go/bin
+
+# Run all tests (51 tests across 4 packages)
+CGO_ENABLED=1 go test -race ./internal/...
+
+# Run specific package tests
+go test -v ./internal/db/
+go test -v ./internal/api/
+go test -v ./internal/dkim/
+go test -v ./internal/config/
+
+# Build Docker image
+docker build -t signpost:dev .
+
+# Run locally with Docker (dev mode)
+docker compose -f docker-compose.dev.yml up --build
+
+# Quick smoke test against running container
+curl http://localhost:8080/api/v1/healthz
+curl -u admin:yourpass http://localhost:8080/api/v1/domains
+```
+
+## Architecture Decisions
+
+- Single container (s6-overlay) over two-container docker-compose — simpler for users
+- Maddy over Postfix+OpenDKIM — unified config, modern, active project (5.9k stars)
+- SQLite over PostgreSQL — zero-config, single file, appropriate scale
+- Config generation (Go templates → maddy.conf) — web app owns config, never edit manually
+- Web app starts first via s6-rc dependency, generates maddy.conf, then Maddy starts
+- Relay credentials encrypted with AES-256-GCM, key derived from SIGNPOST_SECRET_KEY via HKDF-SHA256
+- Configurable relay method per domain: Gmail, ISP, direct, custom SMTP
+- Configurable auth: network trust on port 25, SMTP AUTH on port 587
+
+## Environments
+
+- **Dev:** Local WSL Ubuntu Docker (self-signed TLS, network trust, `docker-compose.dev.yml`)
+- **Prod:** ubuntu01.drcs.ca (LE certs via Cloudflare DNS-01, behind nginx proxy manager, `docker-compose.prod.yml`)
+
+## Implementation Status
+
+### Phase 1 — MVP Core (mostly complete)
+- [x] 1.1: Project scaffolding (Go module, git, directories, .gitignore, .env.example, CI/CD configs)
+- [x] 1.2: Database layer — 12 tests (SQLite, WAL, migrations, domain/relay/settings/maillog CRUD)
+- [x] 1.3: Maddy config generation — 13 tests (Go templates, backup/rollback, real template rendering)
+- [x] 1.4: DKIM key management — 9 tests (RSA 2048, PKCS#8, DNS TXT record generation)
+- [x] 1.5: Docker container — verified (s6-overlay, healthz working, API accessible)
+- [x] 1.6: REST API core — 17 tests (domains CRUD, DKIM gen, DNS records, relay config, settings, logs, test send stub, basic auth)
+- [ ] **1.7: Integration tests** — Testcontainers (container startup, SMTP send, DKIM verification, relay to mock SMTP). Must also serve as the upgrade regression gate — if these pass, an upgrade is safe.
+- [x] 1.8: CI/CD + README (GitHub Actions ci.yml + release.yml, Dependabot, README, CHANGELOG)
+
+### Phase 2 — Web UI (complete)
+- [x] 2.1: Backend prerequisites (SPA handler, embed.FS, extend status with Maddy TCP check, implement test send via SMTP)
+- [x] 2.2: Frontend scaffolding (Vite 8 + React 19 + TypeScript + Tailwind v4 + shadcn/ui)
+- [x] 2.3: API client + TypeScript types (7 interfaces, fetch wrapper with basic auth)
+- [x] 2.4: Layout shell (dark sidebar, React Router v7, theme toggle, login dialog)
+- [x] 2.5: Dashboard page (status cards, recent activity table, empty state)
+- [x] 2.6: Domains page — list + DNS records tab (add domain dialog, copy-to-clipboard)
+- [x] 2.7: Domains page — relay config, DKIM keys, settings tabs (full CRUD)
+- [x] 2.8: Mail log viewer (filterable, load-more pagination)
+- [x] 2.9: Setup wizard (vertical checklist, 5-step flow, first-run detection)
+- [x] 2.10: Dockerfile update (3-stage: Node 20 + Go 1.24 + Maddy)
+- [x] 2.11: Frontend tests — 5 Vitest tests (API client + wizard rendering)
+- [x] 2.12: Final integration verification (Docker build, SPA served, all APIs working)
+
+### Phase 3 — TLS & Security (not started)
+- [ ] 3.1: Let's Encrypt ACME DNS-01 via Cloudflare
+- [ ] 3.2: TLS configuration page
+- [ ] 3.3: Security audit page
+- [ ] 3.4: SMTP user management page
+- [ ] 3.5: Security tests
+- [x] AES-256-GCM credential encryption (internal/crypto package, 10 tests)
+
+### Phase 4 — Polish & Release (not started)
+- [ ] 4.1: Backup/restore
+- [ ] 4.2: Multi-domain support
+- [ ] 4.3: Documentation (setup guide, DNS config, relay setup, troubleshooting, **upgrade runbook**)
+- [ ] 4.4: Release automation (tag → ghcr.io → GitHub Release)
+- [ ] 4.5: Production hardening (version pinning strategy, upgrade-test CI job, Dependabot → integration test gate)
+
+## Known Issues / TODOs for Next Session
+
+1. ~~**Relay password encryption**~~ — **Done.** AES-256-GCM with HKDF-SHA256 key derivation from SIGNPOST_SECRET_KEY. Old plaintext passwords (placeholder-nonce) handled gracefully.
+2. **Test send** — `handleTestSend` now sends real email via local SMTP (Maddy port 25).
+3. **Integration tests** — Phase 1.7 not started. Need Testcontainers to spin up the full container and test SMTP flow end-to-end.
+4. **DNS records** — Need to configure DKIM/SPF/DMARC records on Cloudflare for drcs.ca before real mail delivery works. The API generates the required records (`GET /api/v1/domains/{id}/dns`).
+5. **Relay config** — For prod, configure Gmail relay (app password) so mail goes through Gmail instead of direct delivery. Direct delivery from a residential IP will be rejected by most providers.
+6. **Config reload race** — Rapid API calls (e.g., domain create + DKIM generate) can cause the second SIGHUP to fire while Maddy is restarting. The s6 supervisor handles this gracefully (just restarts again), but could debounce the regenerateConfig calls.
+
+## How to Pick Up
+
+1. Read this file
+2. Run `CGO_ENABLED=1 go test -race ./internal/...` to verify Go tests (52 tests across 4 packages)
+3. Run `cd web && npx vitest run` to verify frontend tests (5 tests)
+4. `docker compose -f docker-compose.dev.yml up --build -d` to start the container
+5. Test: `curl http://localhost:8080/api/v1/healthz` and browse to `http://localhost:8080/`
+6. **Phase 2 Web UI is complete.** Next priorities:
+   - Configure DNS records on Cloudflare for drcs.ca (DKIM/SPF/DMARC)
+   - Configure Gmail relay (app password) for production mail delivery
+   - Phase 1.7: Integration tests (Testcontainers)
+   - Phase 3: TLS & Security
+   - Push to GitHub when ready

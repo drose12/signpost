@@ -8,6 +8,7 @@ import (
 
 	"github.com/drose-drcs/signpost/internal/api"
 	"github.com/drose-drcs/signpost/internal/config"
+	"github.com/drose-drcs/signpost/internal/crypto"
 	"github.com/drose-drcs/signpost/internal/db"
 	"github.com/drose-drcs/signpost/web"
 )
@@ -44,11 +45,30 @@ func main() {
 	// Initialize config generator
 	configGen := config.NewGenerator(tmplPath, confOutput, dataDir)
 
+	// Set up decryption for relay passwords
+	secretKey := envOrDefault("SIGNPOST_SECRET_KEY", "")
+	var decryptFn func(string, string) (string, error)
+	if secretKey != "" {
+		encKey, err := crypto.DeriveKey(secretKey)
+		if err != nil {
+			log.Fatalf("Failed to derive encryption key: %v", err)
+		}
+		decryptFn = func(enc, nonce string) (string, error) {
+			// Graceful migration: old placeholder nonces mean plaintext
+			plaintext, err := crypto.Decrypt(encKey, enc, nonce)
+			if err != nil && nonce == "placeholder-nonce" {
+				return enc, nil
+			}
+			return plaintext, err
+		}
+	} else {
+		// No secret key — assume plaintext passwords (migration path)
+		decryptFn = func(enc, _ string) (string, error) { return enc, nil }
+	}
+
 	// Generate initial Maddy config
 	log.Println("Generating Maddy configuration...")
-	// TODO: Replace with real decryption when AES-256-GCM is implemented (Phase 3)
-	passthrough := func(enc, _ string) (string, error) { return enc, nil }
-	if err := configGen.WriteConfig(database, passthrough); err != nil {
+	if err := configGen.WriteConfig(database, decryptFn); err != nil {
 		log.Printf("WARNING: Failed to generate initial config: %v", err)
 	}
 
@@ -61,7 +81,7 @@ func main() {
 
 	// Start API server
 	webPort := envOrDefault("SIGNPOST_WEB_PORT", "8080")
-	srv := api.NewServer(database, configGen, keysDir, adminUser, adminPass, web.DistFS)
+	srv := api.NewServer(database, configGen, keysDir, adminUser, adminPass, secretKey, web.DistFS)
 
 	log.Printf("Starting web server on :%s", webPort)
 	if err := http.ListenAndServe(":"+webPort, srv.Handler()); err != nil {

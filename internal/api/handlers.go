@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/drose-drcs/signpost/internal/crypto"
 	"github.com/drose-drcs/signpost/internal/db"
 	"github.com/drose-drcs/signpost/internal/dkim"
 )
@@ -294,13 +295,19 @@ func (s *Server) handleUpdateRelay(w http.ResponseWriter, r *http.Request) {
 		req.Port = 587
 	}
 
-	// TODO: Encrypt password before storing
-	// For now, store plaintext (will be replaced with AES-256-GCM in Phase 3)
 	var passEnc, passNonce *string
-	if req.Password != nil {
-		passEnc = req.Password
-		n := "placeholder-nonce"
-		passNonce = &n
+	if req.Password != nil && *req.Password != "" {
+		if s.encKey == nil {
+			writeError(w, http.StatusInternalServerError, "encryption key not configured (set SIGNPOST_SECRET_KEY)")
+			return
+		}
+		enc, nonce, err := crypto.Encrypt(s.encKey, *req.Password)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to encrypt password")
+			return
+		}
+		passEnc = &enc
+		passNonce = &nonce
 	}
 
 	if err := s.db.UpsertRelayConfig(id, req.Method, req.Host, req.Port, req.Username, passEnc, passNonce, req.StartTLS); err != nil {
@@ -452,9 +459,18 @@ func (s *Server) handleRelayTest(w http.ResponseWriter, r *http.Request) {
 
 	// Step 2: If credentials are configured, test SMTP AUTH
 	if rc.Username != nil && *rc.Username != "" && rc.PasswordEnc != nil && *rc.PasswordEnc != "" {
-		// TODO: Replace with real decryption when AES-256-GCM is implemented (Phase 3)
-		// For now, password_enc is stored as plaintext
-		password := *rc.PasswordEnc
+		nonce := ""
+		if rc.PasswordNonce != nil {
+			nonce = *rc.PasswordNonce
+		}
+		password, err := s.decryptRelayPassword(*rc.PasswordEnc, nonce)
+		if err != nil {
+			writeJSON(w, http.StatusOK, map[string]string{
+				"status": "failed",
+				"error":  fmt.Sprintf("Failed to decrypt relay password: %s", err.Error()),
+			})
+			return
+		}
 
 		c, smtpErr := smtp.Dial(addr)
 		if smtpErr != nil {
@@ -701,8 +717,20 @@ func (s *Server) sendViaLoginRelay(w http.ResponseWriter, from, to, subject stri
 
 	// Step 4: AUTH LOGIN
 	if relay.Username != nil && *relay.Username != "" && relay.PasswordEnc != nil && *relay.PasswordEnc != "" {
-		// TODO: Replace with real decryption when AES-256-GCM is implemented (Phase 3)
-		password := *relay.PasswordEnc
+		nonce := ""
+		if relay.PasswordNonce != nil {
+			nonce = *relay.PasswordNonce
+		}
+		password, err := s.decryptRelayPassword(*relay.PasswordEnc, nonce)
+		if err != nil {
+			errStr := fmt.Sprintf("Failed to decrypt relay password: %v", err)
+			s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+			writeJSON(w, http.StatusOK, map[string]string{
+				"status": "failed",
+				"error":  errStr,
+			})
+			return
+		}
 		auth := &loginAuth{username: *relay.Username, password: password}
 		if err := c.Auth(auth); err != nil {
 			errStr := fmt.Sprintf("LOGIN auth failed: %v", err)

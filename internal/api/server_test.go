@@ -30,7 +30,7 @@ func testServer(t *testing.T) (*Server, *db.DB) {
 	)
 
 	keysDir := filepath.Join(dir, "dkim_keys")
-	srv := NewServer(database, gen, keysDir, "admin", "testpass", nil)
+	srv := NewServer(database, gen, keysDir, "admin", "testpass", "test-secret-key-minimum-32-characters-long", nil)
 	return srv, database
 }
 
