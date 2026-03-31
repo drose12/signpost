@@ -78,7 +78,7 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
             setCustomPort(p);
           }
           setUsername(data.username ?? '');
-          setPassword(''); // never pre-fill password
+          setPassword(((data as unknown) as { password?: string }).password ?? '');
           setStarttls(data.starttls);
           setLoading(false);
         }

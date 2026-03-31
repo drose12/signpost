@@ -265,7 +265,26 @@ func (s *Server) handleGetRelay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, rc)
+	// Build response with decrypted password
+	resp := map[string]interface{}{
+		"id":          rc.ID,
+		"domain_id":   rc.DomainID,
+		"method":      rc.Method,
+		"host":        rc.Host,
+		"port":        rc.Port,
+		"username":    rc.Username,
+		"starttls":    rc.StartTLS,
+		"auth_method": rc.AuthMethod,
+		"created_at":  rc.CreatedAt,
+		"updated_at":  rc.UpdatedAt,
+	}
+	if rc.PasswordEnc != nil && rc.PasswordNonce != nil {
+		pw, err := s.decryptRelayPassword(*rc.PasswordEnc, *rc.PasswordNonce)
+		if err == nil {
+			resp["password"] = pw
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleUpdateRelay updates relay config for a domain.
