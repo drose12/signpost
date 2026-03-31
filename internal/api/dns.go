@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -27,9 +29,17 @@ type dnsCheckRecord struct {
 // dnsLookupFunc abstracts DNS TXT lookups for testing.
 type dnsLookupFunc func(name string) ([]string, error)
 
-// defaultLookupTXT wraps net.LookupTXT.
+// defaultLookupTXT uses a custom resolver to bypass Docker's DNS cache.
+// Queries Cloudflare (1.1.1.1) and Google (8.8.8.8) DNS directly.
 func defaultLookupTXT(name string) ([]string, error) {
-	return net.LookupTXT(name)
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 5 * time.Second}
+			return d.DialContext(ctx, "udp", "1.1.1.1:53")
+		},
+	}
+	return resolver.LookupTXT(context.Background(), name)
 }
 
 // handleDNSCheck performs live DNS lookups and compares against recommended records.
