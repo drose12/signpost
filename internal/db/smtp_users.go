@@ -83,6 +83,24 @@ func (db *DB) DeleteSMTPUser(id int64) error {
 	return nil
 }
 
+// ToggleSMTPUserActive toggles the active state of an SMTP user.
+func (db *DB) ToggleSMTPUserActive(id int64, active bool) error {
+	now := time.Now()
+	result, err := db.Exec(`UPDATE smtp_users SET active = ?, updated_at = ? WHERE id = ?`,
+		active, now, id)
+	if err != nil {
+		return fmt.Errorf("toggling SMTP user %d active: %w", id, err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking update result: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("SMTP user %d not found", id)
+	}
+	return nil
+}
+
 // UpdateSMTPUserPassword updates the password hash and encrypted password for an SMTP user.
 func (db *DB) UpdateSMTPUserPassword(id int64, passwordHash string, passwordEnc, passwordNonce *string) error {
 	now := time.Now()

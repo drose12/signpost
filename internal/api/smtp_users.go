@@ -134,6 +134,37 @@ func (s *Server) handleDeleteSMTPUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+// handleToggleSMTPUserActive activates or deactivates an SMTP user.
+func (s *Server) handleToggleSMTPUserActive(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user ID")
+		return
+	}
+
+	var req struct {
+		Active bool `json:"active"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := s.db.ToggleSMTPUserActive(id, req.Active); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	s.db.Checkpoint()
+	go s.regenerateConfig()
+
+	status := "activated"
+	if !req.Active {
+		status = "deactivated"
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": status})
+}
+
 // handleUpdateSMTPUserPassword updates the password for an SMTP user.
 func (s *Server) handleUpdateSMTPUserPassword(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)

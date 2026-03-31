@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Users, Plus, Trash2, KeyRound, Eye, EyeOff, CopyIcon } from 'lucide-react';
+import { Users, Plus, Trash2, KeyRound, Eye, EyeOff, CopyIcon, Power } from 'lucide-react';
 
 function formatTime(ts: string): string {
   try {
@@ -239,6 +239,26 @@ export function SMTPUsers() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={user.active
+                            ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950'
+                            : 'text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-950'
+                          }
+                          onClick={async () => {
+                            try {
+                              await api.put(`/smtp-users/${user.id}/active`, { active: !user.active });
+                              toast.success(`${user.username} ${user.active ? 'deactivated' : 'activated'}`);
+                              fetchUsers();
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : 'Failed to toggle user');
+                            }
+                          }}
+                        >
+                          <Power className="h-3.5 w-3.5 mr-1" />
+                          {user.active ? 'Deactivate' : 'Activate'}
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"

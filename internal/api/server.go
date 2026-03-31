@@ -99,6 +99,7 @@ func (s *Server) buildRouter() chi.Router {
 		r.Post("/api/v1/smtp-users", s.handleCreateSMTPUser)
 		r.Delete("/api/v1/smtp-users/{id}", s.handleDeleteSMTPUser)
 		r.Put("/api/v1/smtp-users/{id}/password", s.handleUpdateSMTPUserPassword)
+		r.Put("/api/v1/smtp-users/{id}/active", s.handleToggleSMTPUserActive)
 
 		// Settings
 		r.Get("/api/v1/settings", s.handleGetSettings)
