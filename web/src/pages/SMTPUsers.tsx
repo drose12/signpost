@@ -187,7 +187,20 @@ export function SMTPUsers() {
                         {user.active ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm font-medium">{user.username}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-medium">{user.username}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(user.username).then(() => toast.success('Username copied'));
+                          }}
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                        >
+                          <CopyIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-mono text-slate-600 dark:text-slate-400">
