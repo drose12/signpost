@@ -19,6 +19,8 @@ type TemplateData struct {
 	PrimaryDomain       string
 	SMTPPort            string
 	SubmissionPort      string
+	SMTPEnabled         bool
+	SubmissionEnabled   bool
 	NetworkTrustEnabled bool
 	NetworkTrustCIDRs   string
 	TLS                 TLSData
@@ -166,14 +168,22 @@ func (g *Generator) buildTemplateData(database *db.DB, decryptPassword func(enc,
 		primaryDomain = domains[0].Name
 	}
 
+	// Count SMTP users early — needed for SubmissionEnabled
+	var userCount int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM smtp_users WHERE active = 1`).Scan(&userCount); err != nil {
+		return nil, fmt.Errorf("counting SMTP users: %w", err)
+	}
+
 	data := &TemplateData{
-		GeneratedAt:        time.Now().UTC().Format(time.RFC3339),
-		Hostname:           hostname,
-		PrimaryDomain:      primaryDomain,
-		SMTPPort:           getOr(settings, "smtp_port", "25"),
-		SubmissionPort:     getOr(settings, "submission_port", "587"),
+		GeneratedAt:         time.Now().UTC().Format(time.RFC3339),
+		Hostname:            hostname,
+		PrimaryDomain:       primaryDomain,
+		SMTPPort:            getOr(settings, "smtp_port", "25"),
+		SubmissionPort:      getOr(settings, "submission_port", "587"),
+		SMTPEnabled:         getOr(settings, "smtp_enabled", "true") == "true",
+		SubmissionEnabled:   getOr(settings, "submission_enabled", "false") == "true" && userCount > 0,
 		NetworkTrustEnabled: getOr(settings, "network_trust_enabled", "true") == "true",
-		NetworkTrustCIDRs:  getOr(settings, "network_trust_cidrs", "172.16.0.0/12,127.0.0.1/8"),
+		NetworkTrustCIDRs:   getOr(settings, "network_trust_cidrs", "172.16.0.0/12,127.0.0.1/8"),
 	}
 
 	// TLS
@@ -250,13 +260,6 @@ func (g *Generator) buildTemplateData(database *db.DB, decryptPassword func(enc,
 	}
 	data.HasRelayDomains = hasRelayDomains
 	data.NeedsDirectDelivery = needsDirectDelivery
-
-	// Check if any SMTP users exist
-	var userCount int
-	err = database.QueryRow(`SELECT COUNT(*) FROM smtp_users WHERE active = 1`).Scan(&userCount)
-	if err != nil {
-		return nil, fmt.Errorf("counting SMTP users: %w", err)
-	}
 	data.SMTPUsers = userCount > 0
 
 	return data, nil

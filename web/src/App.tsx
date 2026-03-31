@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Domains } from './pages/Domains';
 import { MailLog } from './pages/MailLog';
 import { Wizard } from './pages/Wizard';
+import { SMTPUsers } from './pages/SMTPUsers';
 import { hasCredentials } from './api';
 import { initTheme } from './theme';
 
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/domains" element={<Domains />} />
           <Route path="/logs" element={<MailLog />} />
+          <Route path="/smtp-users" element={<SMTPUsers />} />
           <Route path="/wizard" element={<Wizard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

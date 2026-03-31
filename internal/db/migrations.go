@@ -102,4 +102,8 @@ var migrations = []string{
 
 	// Migration 2: Add auth_method column to relay_configs
 	`ALTER TABLE relay_configs ADD COLUMN auth_method TEXT NOT NULL DEFAULT 'plain';`,
+
+	// Migration 3: Add port enable/disable settings
+	`INSERT OR IGNORE INTO settings (key, value) VALUES ('smtp_enabled', 'true');
+	 INSERT OR IGNORE INTO settings (key, value) VALUES ('submission_enabled', 'false');`,
 }

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Globe, Mail, Wand2, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Globe, Mail, Users, Wand2, Sun, Moon } from 'lucide-react';
 import { useState } from 'react';
 import { getTheme, setTheme } from '../theme';
 
@@ -7,6 +7,7 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/domains', icon: Globe, label: 'Domains' },
   { to: '/logs', icon: Mail, label: 'Mail Log' },
+  { to: '/smtp-users', icon: Users, label: 'SMTP Users' },
   { to: '/wizard', icon: Wand2, label: 'Setup Wizard' },
 ];
 

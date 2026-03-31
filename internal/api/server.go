@@ -86,6 +86,12 @@ func (s *Server) buildRouter() chi.Router {
 		r.Put("/api/v1/domains/{id}/relay", s.handleUpdateRelay)
 		r.Post("/api/v1/domains/{id}/relay/test", s.handleRelayTest)
 
+		// SMTP Users
+		r.Get("/api/v1/smtp-users", s.handleListSMTPUsers)
+		r.Post("/api/v1/smtp-users", s.handleCreateSMTPUser)
+		r.Delete("/api/v1/smtp-users/{id}", s.handleDeleteSMTPUser)
+		r.Put("/api/v1/smtp-users/{id}/password", s.handleUpdateSMTPUserPassword)
+
 		// Settings
 		r.Get("/api/v1/settings", s.handleGetSettings)
 		r.Put("/api/v1/settings", s.handleUpdateSettings)

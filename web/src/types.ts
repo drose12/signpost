@@ -93,3 +93,11 @@ export interface DNSCheckRecord {
 export interface DNSCheckResponse {
   records: DNSCheckRecord[];
 }
+
+export interface SMTPUser {
+  id: number;
+  username: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}

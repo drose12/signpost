@@ -329,7 +329,7 @@ func TestStatus(t *testing.T) {
 
 	var resp map[string]interface{}
 	json.Unmarshal(rr.Body.Bytes(), &resp)
-	if resp["schema_version"].(float64) != 2 {
+	if resp["schema_version"].(float64) != 3 {
 		t.Errorf("unexpected schema version: %v", resp["schema_version"])
 	}
 	// maddy_status should be present; value depends on whether port 25 is in use
@@ -464,5 +464,137 @@ func TestDNSCheckNoAuth(t *testing.T) {
 	rr := doRequest(t, srv, "GET", "/api/v1/domains/1/dns/check", nil, false)
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 without auth, got %d", rr.Code)
+	}
+}
+
+func TestSMTPUserCRUD(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// List — empty initially
+	rr := doRequest(t, srv, "GET", "/api/v1/smtp-users", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list smtp users: %d %s", rr.Code, rr.Body.String())
+	}
+	var users []db.SMTPUser
+	json.Unmarshal(rr.Body.Bytes(), &users)
+	if len(users) != 0 {
+		t.Errorf("expected 0 users, got %d", len(users))
+	}
+
+	// Create
+	rr = doRequest(t, srv, "POST", "/api/v1/smtp-users", map[string]string{
+		"username": "sender@drcs.ca",
+		"password": "securepass123",
+	}, true)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create smtp user: %d %s", rr.Code, rr.Body.String())
+	}
+	var created db.SMTPUser
+	json.Unmarshal(rr.Body.Bytes(), &created)
+	if created.Username != "sender@drcs.ca" {
+		t.Errorf("expected username 'sender@drcs.ca', got %q", created.Username)
+	}
+
+	// List — should have 1 user
+	rr = doRequest(t, srv, "GET", "/api/v1/smtp-users", nil, true)
+	json.Unmarshal(rr.Body.Bytes(), &users)
+	if len(users) != 1 {
+		t.Errorf("expected 1 user, got %d", len(users))
+	}
+
+	// Reset password
+	rr = doRequest(t, srv, "PUT", "/api/v1/smtp-users/1/password", map[string]string{
+		"password": "newpassword123",
+	}, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reset password: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Delete
+	rr = doRequest(t, srv, "DELETE", "/api/v1/smtp-users/1", nil, true)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("delete smtp user: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// List — should be empty again
+	rr = doRequest(t, srv, "GET", "/api/v1/smtp-users", nil, true)
+	json.Unmarshal(rr.Body.Bytes(), &users)
+	if len(users) != 0 {
+		t.Errorf("expected 0 users after delete, got %d", len(users))
+	}
+}
+
+func TestSMTPUserDuplicate(t *testing.T) {
+	srv, _ := testServer(t)
+
+	doRequest(t, srv, "POST", "/api/v1/smtp-users", map[string]string{
+		"username": "sender@drcs.ca",
+		"password": "securepass123",
+	}, true)
+
+	rr := doRequest(t, srv, "POST", "/api/v1/smtp-users", map[string]string{
+		"username": "sender@drcs.ca",
+		"password": "otherpass1234",
+	}, true)
+	if rr.Code != http.StatusConflict {
+		t.Errorf("expected 409 for duplicate, got %d", rr.Code)
+	}
+}
+
+func TestSMTPUserValidation(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Missing username
+	rr := doRequest(t, srv, "POST", "/api/v1/smtp-users", map[string]string{
+		"password": "securepass123",
+	}, true)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing username, got %d", rr.Code)
+	}
+
+	// Missing password
+	rr = doRequest(t, srv, "POST", "/api/v1/smtp-users", map[string]string{
+		"username": "sender@drcs.ca",
+	}, true)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing password, got %d", rr.Code)
+	}
+
+	// Short password
+	rr = doRequest(t, srv, "POST", "/api/v1/smtp-users", map[string]string{
+		"username": "sender@drcs.ca",
+		"password": "short",
+	}, true)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for short password, got %d", rr.Code)
+	}
+}
+
+func TestSMTPUserAutoSubmissionToggle(t *testing.T) {
+	srv, database := testServer(t)
+
+	// submission_enabled should start as 'false'
+	val, _ := database.GetSetting("submission_enabled")
+	if val != "false" {
+		t.Errorf("expected submission_enabled='false' initially, got %q", val)
+	}
+
+	// Create first user — should auto-enable submission
+	doRequest(t, srv, "POST", "/api/v1/smtp-users", map[string]string{
+		"username": "sender@drcs.ca",
+		"password": "securepass123",
+	}, true)
+
+	val, _ = database.GetSetting("submission_enabled")
+	if val != "true" {
+		t.Errorf("expected submission_enabled='true' after first user, got %q", val)
+	}
+
+	// Delete last user — should auto-disable submission
+	doRequest(t, srv, "DELETE", "/api/v1/smtp-users/1", nil, true)
+
+	val, _ = database.GetSetting("submission_enabled")
+	if val != "false" {
+		t.Errorf("expected submission_enabled='false' after deleting last user, got %q", val)
 	}
 }

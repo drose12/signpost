@@ -40,8 +40,8 @@ func TestOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("expected schema version 2, got %d", version)
+	if version != 3 {
+		t.Errorf("expected schema version 3, got %d", version)
 	}
 }
 
@@ -63,8 +63,8 @@ func TestOpenIdempotent(t *testing.T) {
 	defer db2.Close()
 
 	version, _ := db2.SchemaVersion()
-	if version != 2 {
-		t.Errorf("expected schema version 2 after reopening, got %d", version)
+	if version != 3 {
+		t.Errorf("expected schema version 3 after reopening, got %d", version)
 	}
 }
 
@@ -314,8 +314,8 @@ func TestSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAllSettings: %v", err)
 	}
-	if len(all) < 7 { // 6 defaults + 1 test
-		t.Errorf("expected at least 7 settings, got %d", len(all))
+	if len(all) < 9 { // 6 defaults + 2 port enables + 1 test
+		t.Errorf("expected at least 9 settings, got %d", len(all))
 	}
 }
 

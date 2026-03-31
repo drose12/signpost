@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ServerIcon, GlobeIcon, ShieldIcon, InfoIcon, NetworkIcon, Send } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { ServerIcon, GlobeIcon, ShieldIcon, InfoIcon, NetworkIcon, Send, PlugIcon } from 'lucide-react';
 
 function formatTime(ts: string): string {
   try {
@@ -131,6 +132,77 @@ function TestEmailCard() {
               <p className="text-sm text-red-500">{result.error}</p>
             )}
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SMTPPortsCard() {
+  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<Record<string, string>>('/settings').then((data) => {
+      setSettings(data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  async function toggle(key: string, current: boolean) {
+    const newValue = current ? 'false' : 'true';
+    try {
+      setToggling(key);
+      await api.put('/settings', { [key]: newValue });
+      setSettings((prev) => ({ ...prev, [key]: newValue }));
+      toast.success(`${key === 'smtp_enabled' ? 'Port 25 (SMTP)' : 'Port 587 (Submission)'} ${newValue === 'true' ? 'enabled' : 'disabled'}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to update setting';
+      toast.error(msg);
+    } finally {
+      setToggling(null);
+    }
+  }
+
+  if (loading) return null;
+
+  const smtpEnabled = settings.smtp_enabled !== 'false';
+  const submissionEnabled = settings.submission_enabled === 'true';
+
+  return (
+    <Card className="dark:bg-slate-800">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">SMTP Ports</CardTitle>
+        <PlugIcon className="h-4 w-4 text-slate-400" />
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Port 25 (SMTP)</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Network-trust, no authentication</p>
+          </div>
+          <Switch
+            checked={smtpEnabled}
+            onCheckedChange={() => toggle('smtp_enabled', smtpEnabled)}
+            disabled={toggling !== null}
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Port 587 (Submission)</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Requires SMTP AUTH (username/password)</p>
+          </div>
+          <Switch
+            checked={submissionEnabled}
+            onCheckedChange={() => toggle('submission_enabled', submissionEnabled)}
+            disabled={toggling !== null}
+          />
+        </div>
+        {submissionEnabled && settings.submission_enabled === 'true' && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            Note: Submission requires at least one SMTP user to be configured.
+          </p>
         )}
       </CardContent>
     </Card>
@@ -262,6 +334,9 @@ export function Dashboard() {
 
       {/* Send Test Email */}
       {status && status.domain_count > 0 && <TestEmailCard />}
+
+      {/* SMTP Ports */}
+      <SMTPPortsCard />
 
       {/* Recent activity */}
       <div className="space-y-2">
