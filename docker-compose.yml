@@ -1,0 +1,21 @@
+services:
+  signpost:
+    build: .
+    ports:
+      - "${SIGNPOST_SMTP_PORT:-25}:25"
+      - "${SIGNPOST_SUBMISSION_PORT:-587}:587"
+      - "${SIGNPOST_WEB_PORT:-8080}:8080"
+    volumes:
+      - signpost-data:/data/signpost
+    environment:
+      - SIGNPOST_DOMAIN=${SIGNPOST_DOMAIN:?SIGNPOST_DOMAIN is required}
+      - SIGNPOST_SECRET_KEY=${SIGNPOST_SECRET_KEY:?SIGNPOST_SECRET_KEY is required}
+      - SIGNPOST_ADMIN_PASS=${SIGNPOST_ADMIN_PASS:?SIGNPOST_ADMIN_PASS is required}
+      - SIGNPOST_ADMIN_USER=${SIGNPOST_ADMIN_USER:-admin}
+      - SIGNPOST_HOSTNAME=${SIGNPOST_HOSTNAME:-}
+      - SIGNPOST_ENV=${SIGNPOST_ENV:-prod}
+      - SIGNPOST_LOG_LEVEL=${SIGNPOST_LOG_LEVEL:-info}
+    restart: unless-stopped
+
+volumes:
+  signpost-data:

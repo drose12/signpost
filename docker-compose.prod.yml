@@ -1,0 +1,23 @@
+services:
+  signpost:
+    image: ghcr.io/drose-drcs/signpost:latest
+    ports:
+      - "25:25"
+      - "587:587"
+      - "127.0.0.1:8080:8080"  # Web UI bound to localhost, accessed via reverse proxy
+    volumes:
+      - signpost-data:/data/signpost
+    environment:
+      - SIGNPOST_ENV=prod
+      - SIGNPOST_DOMAIN=${SIGNPOST_DOMAIN}
+      - SIGNPOST_SECRET_KEY=${SIGNPOST_SECRET_KEY}
+      - SIGNPOST_ADMIN_PASS=${SIGNPOST_ADMIN_PASS}
+      - SIGNPOST_ADMIN_USER=${SIGNPOST_ADMIN_USER:-admin}
+      - SIGNPOST_HOSTNAME=${SIGNPOST_HOSTNAME:-}
+      - SIGNPOST_ACME_EMAIL=${SIGNPOST_ACME_EMAIL:-}
+      - SIGNPOST_CF_API_TOKEN=${SIGNPOST_CF_API_TOKEN:-}
+      - SIGNPOST_LOG_LEVEL=info
+    restart: unless-stopped
+
+volumes:
+  signpost-data:

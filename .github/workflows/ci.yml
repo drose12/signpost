@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-go:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Run vet
+        run: go vet ./...
+
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run audit
+        run: npm audit --audit-level=critical
+
+  build-docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [test-go, test-frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t signpost:ci .
+
+      - name: Verify health check
+        run: |
+          docker run -d --name signpost-test \
+            -e SIGNPOST_DOMAIN=test.example.com \
+            -e SIGNPOST_SECRET_KEY=ci-test-key-minimum-32-characters-long \
+            -e SIGNPOST_ADMIN_PASS=testpass \
+            signpost:ci
+          sleep 10
+          docker exec signpost-test curl -f http://localhost:8080/api/v1/healthz || exit 1
+          docker stop signpost-test
+          docker rm signpost-test

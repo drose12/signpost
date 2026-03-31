@@ -1,0 +1,16 @@
+services:
+  signpost:
+    build: .
+    ports:
+      - "25:25"
+      - "587:587"
+      - "8081:8080"
+    volumes:
+      - ./data:/data/signpost
+    environment:
+      - SIGNPOST_ENV=dev
+      - SIGNPOST_DOMAIN=${SIGNPOST_DOMAIN:-drcs.ca}
+      - SIGNPOST_SECRET_KEY=${SIGNPOST_SECRET_KEY:-dev-secret-key-minimum-32-characters-long}
+      - SIGNPOST_ADMIN_PASS=${SIGNPOST_ADMIN_PASS:-admin}
+      - SIGNPOST_ADMIN_USER=${SIGNPOST_ADMIN_USER:-admin}
+      - SIGNPOST_LOG_LEVEL=debug
