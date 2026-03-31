@@ -73,3 +73,14 @@ func (db *DB) UpdateTLSConfig(mode string, acmeEmail, acmeProvider, certPath, ke
 	}
 	return nil
 }
+
+// UpdateTLSCertPaths updates only the cert and key paths in the TLS configuration.
+// This is used by the self-signed cert generator at startup.
+func (db *DB) UpdateTLSCertPaths(certPath, keyPath string) error {
+	_, err := db.Exec(`UPDATE tls_config SET cert_path = ?, key_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1`,
+		certPath, keyPath)
+	if err != nil {
+		return fmt.Errorf("updating TLS cert paths: %w", err)
+	}
+	return nil
+}

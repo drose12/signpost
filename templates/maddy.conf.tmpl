@@ -12,7 +12,11 @@ runtime_dir /tmp/maddy
 
 ## TLS configuration
 {{- if or (eq .TLS.Mode "self-signed") (eq .TLS.Mode "")}}
+{{- if and .TLS.CertPath .TLS.KeyPath}}
+tls file {{.TLS.CertPath}} {{.TLS.KeyPath}}
+{{- else}}
 tls off
+{{- end}}
 {{- else if eq .TLS.Mode "manual"}}
 tls file {{.TLS.CertPath}} {{.TLS.KeyPath}}
 {{- else if eq .TLS.Mode "acme"}}

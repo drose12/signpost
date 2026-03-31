@@ -24,12 +24,14 @@ type Server struct {
 	router    chi.Router
 	adminUser string
 	adminPass string
-	encKey    []byte // AES-256 key derived from SIGNPOST_SECRET_KEY
-	webFS     fs.FS  // embedded frontend, nil in dev
+	encKey    []byte  // AES-256 key derived from SIGNPOST_SECRET_KEY
+	dataDir   string  // data directory path
+	hostname  string  // mail hostname (e.g., mail.drcs.ca)
+	webFS     fs.FS   // embedded frontend, nil in dev
 }
 
 // NewServer creates a new API server.
-func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser, adminPass, secretKey string, webFS fs.FS) *Server {
+func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser, adminPass, secretKey, dataDir, hostname string, webFS fs.FS) *Server {
 	var encKey []byte
 	if secretKey != "" {
 		var err error
@@ -45,6 +47,8 @@ func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser,
 		adminUser: adminUser,
 		adminPass: adminPass,
 		encKey:    encKey,
+		dataDir:   dataDir,
+		hostname:  hostname,
 		webFS:     webFS,
 	}
 	s.router = s.buildRouter()
@@ -95,6 +99,10 @@ func (s *Server) buildRouter() chi.Router {
 		// Settings
 		r.Get("/api/v1/settings", s.handleGetSettings)
 		r.Put("/api/v1/settings", s.handleUpdateSettings)
+
+		// TLS
+		r.Get("/api/v1/tls", s.handleGetTLS)
+		r.Post("/api/v1/tls/generate-selfsigned", s.handleGenerateSelfSigned)
 
 		// Mail logs
 		r.Get("/api/v1/logs", s.handleGetLogs)

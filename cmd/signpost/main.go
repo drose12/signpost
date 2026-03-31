@@ -10,6 +10,7 @@ import (
 	"github.com/drose-drcs/signpost/internal/config"
 	"github.com/drose-drcs/signpost/internal/crypto"
 	"github.com/drose-drcs/signpost/internal/db"
+	selfsigned "github.com/drose-drcs/signpost/internal/tls"
 	"github.com/drose-drcs/signpost/web"
 )
 
@@ -44,6 +45,24 @@ func main() {
 
 	// Initialize config generator
 	configGen := config.NewGenerator(tmplPath, confOutput, dataDir)
+
+	// Generate self-signed TLS certificate if needed
+	tlsConfig, err := database.GetTLSConfig()
+	if err != nil {
+		log.Printf("WARNING: Failed to get TLS config: %v", err)
+	}
+	if tlsConfig != nil && (tlsConfig.Mode == "self-signed" || tlsConfig.Mode == "") {
+		hostname := envOrDefault("SIGNPOST_DOMAIN", "localhost")
+		certPath, keyPath, certErr := selfsigned.EnsureSelfSignedCert(dataDir, "mail."+hostname)
+		if certErr != nil {
+			log.Printf("WARNING: Failed to generate self-signed cert: %v", certErr)
+		} else {
+			log.Printf("Using self-signed TLS certificate: %s", certPath)
+			if updateErr := database.UpdateTLSCertPaths(certPath, keyPath); updateErr != nil {
+				log.Printf("WARNING: Failed to update TLS cert paths in DB: %v", updateErr)
+			}
+		}
+	}
 
 	// Set up decryption for relay passwords
 	secretKey := envOrDefault("SIGNPOST_SECRET_KEY", "")
@@ -81,7 +100,8 @@ func main() {
 
 	// Start API server
 	webPort := envOrDefault("SIGNPOST_WEB_PORT", "8080")
-	srv := api.NewServer(database, configGen, keysDir, adminUser, adminPass, secretKey, web.DistFS)
+	hostname := "mail." + envOrDefault("SIGNPOST_DOMAIN", "localhost")
+	srv := api.NewServer(database, configGen, keysDir, adminUser, adminPass, secretKey, dataDir, hostname, web.DistFS)
 
 	log.Printf("Starting web server on :%s", webPort)
 	if err := http.ListenAndServe(":"+webPort, srv.Handler()); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/drose-drcs/signpost/internal/crypto"
 	"github.com/drose-drcs/signpost/internal/db"
 	"github.com/drose-drcs/signpost/internal/dkim"
+	selfsigned "github.com/drose-drcs/signpost/internal/tls"
 )
 
 // handleHealthz is the lightweight health check endpoint.
@@ -821,5 +822,73 @@ func (s *Server) sendViaLoginRelay(w http.ResponseWriter, from, to, subject stri
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "sent",
 		"message": fmt.Sprintf("Test email sent from %s to %s via %s (LOGIN auth, Go DKIM)", from, to, relayAddr),
+	})
+}
+
+// handleGetTLS returns the current TLS configuration.
+func (s *Server) handleGetTLS(w http.ResponseWriter, r *http.Request) {
+	tlsConfig, err := s.db.GetTLSConfig()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := map[string]interface{}{
+		"mode":      tlsConfig.Mode,
+		"cert_path": tlsConfig.CertPath,
+		"key_path":  tlsConfig.KeyPath,
+	}
+	if tlsConfig.CertExpiry != nil {
+		resp["cert_expiry"] = tlsConfig.CertExpiry
+	}
+
+	// Check if cert file exists and get info
+	if tlsConfig.CertPath != nil && *tlsConfig.CertPath != "" {
+		if _, err := os.Stat(*tlsConfig.CertPath); err == nil {
+			resp["cert_exists"] = true
+		} else {
+			resp["cert_exists"] = false
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleGenerateSelfSigned generates (or regenerates) a self-signed TLS certificate.
+func (s *Server) handleGenerateSelfSigned(w http.ResponseWriter, r *http.Request) {
+	if s.dataDir == "" {
+		writeError(w, http.StatusInternalServerError, "data directory not configured")
+		return
+	}
+
+	hostname := s.hostname
+	if hostname == "" {
+		hostname = "localhost"
+	}
+
+	// Delete existing certs to force regeneration
+	os.Remove(s.dataDir + "/tls/selfsigned.crt")
+	os.Remove(s.dataDir + "/tls/selfsigned.key")
+
+	certPath, keyPath, err := selfsigned.EnsureSelfSignedCert(s.dataDir, hostname)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to generate certificate: %v", err))
+		return
+	}
+
+	// Update DB
+	if err := s.db.UpdateTLSCertPaths(certPath, keyPath); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to update TLS config: %v", err))
+		return
+	}
+
+	// Regenerate Maddy config and reload
+	go s.regenerateConfig()
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":    "ok",
+		"message":   fmt.Sprintf("Self-signed certificate generated for %s", hostname),
+		"cert_path": certPath,
+		"key_path":  keyPath,
 	})
 }

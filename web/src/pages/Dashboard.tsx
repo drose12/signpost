@@ -138,6 +138,64 @@ function TestEmailCard() {
   );
 }
 
+function TLSCard() {
+  const [tlsInfo, setTlsInfo] = useState<{ mode: string; cert_path?: string; cert_exists?: boolean } | null>(null);
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    api.get<{ mode: string; cert_path?: string; cert_exists?: boolean }>('/tls')
+      .then(setTlsInfo)
+      .catch(() => {});
+  }, []);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      await api.post('/tls/generate-selfsigned');
+      toast.success('Self-signed certificate generated');
+      const info = await api.get<{ mode: string; cert_path?: string; cert_exists?: boolean }>('/tls');
+      setTlsInfo(info);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to generate certificate');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  if (!tlsInfo) return null;
+
+  return (
+    <Card className="dark:bg-slate-800">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">TLS Certificate</CardTitle>
+        <ShieldIcon className="h-4 w-4 text-slate-400" />
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-slate-800 dark:text-slate-100">
+              Mode: <span className="font-medium capitalize">{tlsInfo.mode || 'self-signed'}</span>
+            </p>
+            {tlsInfo.cert_path && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{tlsInfo.cert_path}</p>
+            )}
+            {tlsInfo.cert_exists === true && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">Certificate active</p>
+            )}
+            {tlsInfo.cert_exists === false && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Certificate file missing</p>
+            )}
+          </div>
+          <Button variant="outline" size="sm" onClick={handleGenerate} disabled={generating}>
+            <ShieldIcon className="h-3.5 w-3.5 mr-1.5" />
+            {generating ? 'Generating...' : tlsInfo.cert_exists ? 'Regenerate' : 'Generate'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SMTPPortsCard() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -289,13 +347,13 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{status?.domain_count ?? 0}</div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Domains configured</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Domains</p>
           </CardContent>
         </Card>
 
         <Card className="dark:bg-slate-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">TLS Mode</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">TLS</CardTitle>
             <ShieldIcon className="h-4 w-4 text-slate-400" />
           </CardHeader>
           <CardContent>
@@ -303,6 +361,12 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* TLS Management */}
+      <TLSCard />
+
+      {/* SMTP Ports */}
+      <SMTPPortsCard />
 
       {/* Listeners */}
       {status?.listeners && status.listeners.length > 0 && (
@@ -349,9 +413,6 @@ export function Dashboard() {
 
       {/* Send Test Email */}
       {status && status.domain_count > 0 && <TestEmailCard />}
-
-      {/* SMTP Ports */}
-      <SMTPPortsCard />
 
       {/* Recent activity */}
       <div className="space-y-2">

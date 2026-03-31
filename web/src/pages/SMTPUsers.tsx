@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Users, Plus, Trash2, KeyRound, Eye, EyeOff } from 'lucide-react';
+import { Users, Plus, Trash2, KeyRound, Eye, EyeOff, CopyIcon } from 'lucide-react';
 
 function formatTime(ts: string): string {
   try {
@@ -197,16 +197,27 @@ export function SMTPUsers() {
                           }
                         </span>
                         {user.password && (
-                          <button
-                            type="button"
-                            onClick={() => togglePasswordVisibility(user.id)}
-                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                          >
-                            {visiblePasswords.has(user.id)
-                              ? <EyeOff className="h-3.5 w-3.5" />
-                              : <Eye className="h-3.5 w-3.5" />
-                            }
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => togglePasswordVisibility(user.id)}
+                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                            >
+                              {visiblePasswords.has(user.id)
+                                ? <EyeOff className="h-3.5 w-3.5" />
+                                : <Eye className="h-3.5 w-3.5" />
+                              }
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(user.password!).then(() => toast.success('Password copied'));
+                              }}
+                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                            >
+                              <CopyIcon className="h-3.5 w-3.5" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </TableCell>
