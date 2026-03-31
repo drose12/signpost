@@ -14,7 +14,7 @@ import (
 	"github.com/drose-drcs/signpost/web"
 )
 
-var version = "dev"
+var version = "v0.2.0"
 
 func main() {
 	fmt.Println("SignPost - DKIM-signing SMTP relay")
