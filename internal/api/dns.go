@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"net/http"
@@ -24,6 +25,7 @@ type dnsCheckRecord struct {
 	Recommended string  `json:"recommended"`
 	Status      string  `json:"status"`  // ok, missing, update, conflict
 	Message     string  `json:"message"`
+	TTL         *int    `json:"ttl,omitempty"` // TTL in seconds, if detected
 }
 
 // dnsLookupFunc abstracts DNS TXT lookups for testing.
@@ -40,6 +42,94 @@ func defaultLookupTXT(name string) ([]string, error) {
 		},
 	}
 	return resolver.LookupTXT(context.Background(), name)
+}
+
+// lookupTXTTTL returns the TTL (in seconds) for TXT records at the given name.
+// Uses a raw DNS query to Cloudflare 1.1.1.1. Returns 0 if lookup fails.
+func lookupTXTTTL(name string) int {
+	// Build a minimal DNS query for TXT records
+	// DNS header (12 bytes) + question section
+	txID := uint16(0x1234)
+	flags := uint16(0x0100) // standard query, recursion desired
+	qdCount := uint16(1)
+
+	var query []byte
+	// Header
+	query = binary.BigEndian.AppendUint16(query, txID)
+	query = binary.BigEndian.AppendUint16(query, flags)
+	query = binary.BigEndian.AppendUint16(query, qdCount)
+	query = binary.BigEndian.AppendUint16(query, 0) // ancount
+	query = binary.BigEndian.AppendUint16(query, 0) // nscount
+	query = binary.BigEndian.AppendUint16(query, 0) // arcount
+
+	// Question: encode domain name
+	for _, label := range strings.Split(name, ".") {
+		query = append(query, byte(len(label)))
+		query = append(query, []byte(label)...)
+	}
+	query = append(query, 0) // root label
+	query = binary.BigEndian.AppendUint16(query, 16) // TXT type
+	query = binary.BigEndian.AppendUint16(query, 1)  // IN class
+
+	// Send UDP query
+	conn, err := net.DialTimeout("udp", "1.1.1.1:53", 3*time.Second)
+	if err != nil {
+		return 0
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+
+	if _, err := conn.Write(query); err != nil {
+		return 0
+	}
+
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil || n < 12 {
+		return 0
+	}
+
+	// Parse answer count from header
+	anCount := binary.BigEndian.Uint16(buf[6:8])
+	if anCount == 0 {
+		return 0
+	}
+
+	// Skip header (12 bytes) and question section
+	offset := 12
+	// Skip question name
+	for offset < n {
+		if buf[offset] == 0 {
+			offset++ // root label
+			break
+		}
+		if buf[offset]&0xC0 == 0xC0 {
+			offset += 2 // pointer
+			break
+		}
+		offset += int(buf[offset]) + 1
+	}
+	offset += 4 // skip qtype + qclass
+
+	// Parse first answer to get TTL
+	if offset >= n {
+		return 0
+	}
+	// Skip answer name (may be pointer)
+	if buf[offset]&0xC0 == 0xC0 {
+		offset += 2
+	} else {
+		for offset < n && buf[offset] != 0 {
+			offset += int(buf[offset]) + 1
+		}
+		offset++ // root
+	}
+	if offset+10 > n {
+		return 0
+	}
+	// offset now at: type(2) + class(2) + TTL(4) + rdlength(2)
+	ttl := binary.BigEndian.Uint32(buf[offset+4 : offset+8])
+	return int(ttl)
 }
 
 // handleDNSCheck performs live DNS lookups and compares against recommended records.
@@ -98,6 +188,16 @@ func performDNSCheck(domainName, dkimSelector string, dkimPublicDNS *string, rel
 
 	// DMARC check
 	records = append(records, checkDMARC(domainName, lookupTXT))
+
+	// Populate TTLs for each record
+	for i := range records {
+		if records[i].Current != nil {
+			ttl := lookupTXTTTL(records[i].Name)
+			if ttl > 0 {
+				records[i].TTL = &ttl
+			}
+		}
+	}
 
 	return records
 }

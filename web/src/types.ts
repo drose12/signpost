@@ -95,6 +95,7 @@ export interface DNSCheckRecord {
   recommended: string;
   status: 'ok' | 'missing' | 'update' | 'conflict';
   message: string;
+  ttl?: number;
 }
 
 export interface DNSCheckResponse {

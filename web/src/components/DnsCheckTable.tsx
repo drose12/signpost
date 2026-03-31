@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CopyIcon, RefreshCwIcon, InfoIcon, CheckCircleIcon, AlertTriangleIcon, XCircleIcon } from 'lucide-react';
+import { CopyIcon, RefreshCwIcon, CheckCircleIcon, AlertTriangleIcon, XCircleIcon } from 'lucide-react';
 
 function statusBadge(status: DNSCheckRecord['status']) {
   switch (status) {
@@ -32,6 +32,13 @@ function purposeLabel(purpose: string) {
 
 function copyValue(value: string) {
   navigator.clipboard.writeText(value).then(() => toast.success('Copied!')).catch(() => toast.error('Copy failed'));
+}
+
+function formatTTL(seconds: number): string {
+  if (seconds >= 86400) return `${Math.floor(seconds / 86400)}d`;
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds >= 60) return `${Math.floor(seconds / 60)}m`;
+  return `${seconds}s`;
 }
 
 interface DnsCheckTableProps {
@@ -65,14 +72,8 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800 flex-1">
-          <InfoIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
-            DNS changes can take up to 24–48 hours to propagate.
-          </AlertDescription>
-        </Alert>
-        <Button variant="outline" className="ml-4" onClick={runCheck} disabled={loading}>
+      <div className="flex justify-end">
+        <Button variant="outline" onClick={runCheck} disabled={loading}>
           <RefreshCwIcon className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           {checked ? 'Re-check DNS' : 'Check DNS'}
         </Button>
@@ -104,6 +105,7 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
                 <TableHead className="w-[120px]">Status</TableHead>
                 <TableHead>Current Value</TableHead>
                 <TableHead>Recommended Value</TableHead>
+                <TableHead className="w-[70px]">TTL</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -139,6 +141,9 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
                       )}
                       <div className="text-xs text-slate-400 dark:text-slate-500">{record.message}</div>
                     </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    {record.ttl != null ? formatTTL(record.ttl) : '—'}
                   </TableCell>
                   <TableCell>
                     {record.status !== 'ok' && (
