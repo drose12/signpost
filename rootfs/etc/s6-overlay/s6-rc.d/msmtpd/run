@@ -1,0 +1,8 @@
+#!/command/with-contenv sh
+# Only start msmtpd if msmtp.conf exists (LOGIN-auth relay configured)
+if [ ! -f /data/signpost/msmtp.conf ]; then
+  echo "No msmtp.conf — no LOGIN relay configured. Sleeping."
+  exec sleep infinity
+fi
+echo "Starting msmtpd on 127.0.0.1:2500"
+exec msmtpd --interface=127.0.0.1 --port=2500 --command="msmtp -C /data/signpost/msmtp.conf --read-envelope-from -t"

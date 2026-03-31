@@ -38,6 +38,12 @@ tls &acme_tls
 ## ---------------------------------------------------------------
 {{- range $i, $d := .Domains}}
 {{- if and $d.Active $d.Relay}}
+{{- if $d.Relay.MsmtpProxy}}
+
+target.smtp relay_{{$i}} {
+    targets tcp://127.0.0.1:2500
+}
+{{- else}}
 
 target.smtp relay_{{$i}} {
     targets tcp://{{$d.Relay.Host}}:{{$d.Relay.Port}}
@@ -48,6 +54,7 @@ target.smtp relay_{{$i}} {
     auth plain "{{$d.Relay.Username}}" "{{$d.Relay.Password}}"
     {{- end}}
 }
+{{- end}}
 {{- end}}
 {{- end}}
 

@@ -57,6 +57,7 @@ type RelayData struct {
 	Password   string
 	StartTLS   bool
 	AuthMethod string // "plain" or "login"
+	MsmtpProxy bool   // true = relay through local msmtpd instead of direct to host
 }
 
 // Generator creates Maddy configuration files from database state.
@@ -104,10 +105,25 @@ func (g *Generator) Generate(database *db.DB, decryptPassword func(enc, nonce st
 // WriteConfig generates the config and writes it to the output path.
 // It preserves the previous config as a .bak file.
 func (g *Generator) WriteConfig(database *db.DB, decryptPassword func(enc, nonce string) (string, error)) error {
-	content, err := g.Generate(database, decryptPassword)
+	data, err := g.buildTemplateData(database, decryptPassword)
 	if err != nil {
-		return err
+		return fmt.Errorf("building template data: %w", err)
 	}
+
+	// Render Maddy config
+	tmplContent, err := os.ReadFile(g.templatePath)
+	if err != nil {
+		return fmt.Errorf("reading template: %w", err)
+	}
+	tmpl, err := template.New("maddy").Parse(string(tmplContent))
+	if err != nil {
+		return fmt.Errorf("parsing template: %w", err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("executing template: %w", err)
+	}
+	content := buf.String()
 
 	// Backup existing config
 	if _, statErr := os.Stat(g.outputPath); statErr == nil {
@@ -125,6 +141,53 @@ func (g *Generator) WriteConfig(database *db.DB, decryptPassword func(enc, nonce
 
 	if err := os.WriteFile(g.outputPath, []byte(content), 0640); err != nil {
 		return fmt.Errorf("writing config: %w", err)
+	}
+
+	// Also generate msmtp.conf if there are LOGIN-auth relay domains
+	if err := g.writeMsmtpConfig(data); err != nil {
+		return fmt.Errorf("writing msmtp config: %w", err)
+	}
+
+	return nil
+}
+
+// writeMsmtpConfig generates msmtp.conf for LOGIN-auth relay domains.
+func (g *Generator) writeMsmtpConfig(data *TemplateData) error {
+	hasLoginRelay := false
+	for _, d := range data.Domains {
+		if d.Relay != nil && d.Relay.AuthMethod == "login" {
+			hasLoginRelay = true
+			break
+		}
+	}
+
+	msmtpConfPath := filepath.Join(g.dataDir, "msmtp.conf")
+
+	if !hasLoginRelay {
+		// Remove msmtp.conf if no LOGIN relays
+		os.Remove(msmtpConfPath)
+		return nil
+	}
+
+	msmtpTmplPath := filepath.Join(filepath.Dir(g.templatePath), "msmtp.conf.tmpl")
+	tmplContent, err := os.ReadFile(msmtpTmplPath)
+	if err != nil {
+		return fmt.Errorf("reading msmtp template: %w", err)
+	}
+
+	tmpl, err := template.New("msmtp").Parse(string(tmplContent))
+	if err != nil {
+		return fmt.Errorf("parsing msmtp template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("executing msmtp template: %w", err)
+	}
+
+	// Write with restrictive permissions (contains passwords)
+	if err := os.WriteFile(msmtpConfPath, buf.Bytes(), 0600); err != nil {
+		return fmt.Errorf("writing msmtp config: %w", err)
 	}
 
 	return nil
@@ -241,13 +304,12 @@ func (g *Generator) buildTemplateData(database *db.DB, decryptPassword func(enc,
 				rd.Password = pw
 			}
 
-			// LOGIN auth relays are handled by Go directly, not Maddy.
-			// In Maddy config, treat them like direct delivery domains.
+			// LOGIN auth relays are proxied through msmtpd on localhost:2500.
+			// msmtp handles the LOGIN auth to the ISP.
 			if rc.AuthMethod == "login" {
-				dd.Relay = nil // no Maddy relay target
-				if d.Active {
-					needsDirectDelivery = true
-				}
+				rd.MsmtpProxy = true
+				dd.Relay = rd
+				hasRelayDomains = true
 			} else {
 				dd.Relay = rd
 				hasRelayDomains = true
