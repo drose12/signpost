@@ -56,6 +56,7 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [starttls, setStarttls] = useState(true);
+  const [methodCache, setMethodCache] = useState<Record<string, { host: string; portPreset: string; customPort: string; username: string; password: string; starttls: boolean }>>({});
 
   const effectivePort = portPreset === 'custom' ? customPort : portPreset;
 
@@ -93,14 +94,42 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
 
   function handleMethodChange(val: string) {
     const m = val as RelayMethod;
+    // Save current fields for the old method
+    setMethodCache((prev) => ({
+      ...prev,
+      [method]: { host, portPreset, customPort, username, password, starttls },
+    }));
     setMethod(m);
-    if (m === 'gmail') {
+    // Restore cached fields or use defaults
+    const cached = methodCache[m];
+    if (cached) {
+      setHost(cached.host);
+      setPortPreset(cached.portPreset);
+      setCustomPort(cached.customPort);
+      setUsername(cached.username);
+      setPassword(cached.password);
+      setStarttls(cached.starttls);
+    } else if (m === 'gmail') {
       setHost('smtp.gmail.com');
       setPortPreset('587');
+      setCustomPort('');
+      setUsername('');
+      setPassword('');
       setStarttls(true);
     } else if (m === 'direct') {
       setHost('');
       setPortPreset('25');
+      setCustomPort('');
+      setUsername('');
+      setPassword('');
+      setStarttls(false);
+    } else {
+      setHost('');
+      setPortPreset('587');
+      setCustomPort('');
+      setUsername('');
+      setPassword('');
+      setStarttls(true);
     }
   }
 
