@@ -824,16 +824,30 @@ function AddDomainDialog({ open, onOpenChange, onCreated }: {
 // Main Domains Page
 // ---------------------------------------------------------------------------
 
+type DomainHealth = 'green' | 'amber' | 'unknown';
+
 export function Domains() {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [domainHealth, setDomainHealth] = useState<Record<number, DomainHealth>>({});
 
   const fetchDomains = useCallback(async () => {
     try {
       const data = await api.get<Domain[]>('/domains');
       setDomains(data);
+      // Check DNS health for each domain in background
+      for (const d of data) {
+        api.get<{ records: Array<{ status: string }> }>(`/domains/${d.id}/dns/check`)
+          .then((check) => {
+            const allOk = check.records.every((r) => r.status === 'ok');
+            setDomainHealth((prev) => ({ ...prev, [d.id]: allOk ? 'green' : 'amber' }));
+          })
+          .catch(() => {
+            setDomainHealth((prev) => ({ ...prev, [d.id]: 'unknown' }));
+          });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to load domains');
     } finally {
@@ -902,7 +916,7 @@ export function Domains() {
         <div className="space-y-2">
           {domains.map((domain) => {
             const isSelected = domain.id === selectedId;
-            const isHealthy = Boolean(domain.dkim_key_path);
+            const health = domainHealth[domain.id] ?? 'unknown';
             return (
               <div
                 key={domain.id}
@@ -915,10 +929,12 @@ export function Domains() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isHealthy ? 'bg-green-500' : 'bg-amber-500'}`} />
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                      health === 'green' ? 'bg-green-500' : health === 'amber' ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600'
+                    }`} />
                     <span className="font-medium text-slate-800 dark:text-slate-100">{domain.name}</span>
-                    {!isHealthy && (
-                      <span className="text-xs text-amber-600 dark:text-amber-400">Setup incomplete</span>
+                    {health === 'amber' && (
+                      <span className="text-xs text-amber-600 dark:text-amber-400">DNS issues</span>
                     )}
                   </div>
                   <Button
