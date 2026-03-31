@@ -106,6 +106,9 @@ func (s *Server) buildRouter() chi.Router {
 		r.Get("/api/v1/tls", s.handleGetTLS)
 		r.Post("/api/v1/tls/generate-selfsigned", s.handleGenerateSelfSigned)
 
+		// Network
+		r.Get("/api/v1/network/public-ip", s.handlePublicIP)
+
 		// Mail logs
 		r.Get("/api/v1/logs", s.handleGetLogs)
 

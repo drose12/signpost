@@ -21,9 +21,15 @@ export interface RelayConfig {
   host?: string;
   port: number;
   username?: string;
+  password?: string;
   starttls: boolean;
+  auth_method?: string; // plain or login
   created_at: string;
   updated_at: string;
+}
+
+export interface PublicIPResponse {
+  ip: string;
 }
 
 export interface MailLogEntry {

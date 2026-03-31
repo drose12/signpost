@@ -2,33 +2,37 @@
 import { useEffect, useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/api';
-import type { Domain, RelayConfig, DKIMGenerateResponse, RelayTestResponse } from '@/types';
+import type { Domain, RelayConfig, DKIMGenerateResponse, RelayTestResponse, PublicIPResponse } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { PlusIcon, CopyIcon, KeyIcon, TrashIcon, Eye, EyeOff } from 'lucide-react';
+import {
+  PlusIcon, CopyIcon, KeyIcon, TrashIcon, Eye, EyeOff,
+  Mail, Globe, Server, Settings, AlertTriangle, Pencil, Zap,
+} from 'lucide-react';
 import { DnsCheckTable } from '@/components/DnsCheckTable';
 
 // ---------------------------------------------------------------------------
-// DNS Records Tab
-// ---------------------------------------------------------------------------
-
-function DnsRecordsTab({ domain }: { domain: Domain }) {
-  return <DnsCheckTable domainId={domain.id} />;
-}
-
-// ---------------------------------------------------------------------------
-// Relay Config Tab
+// Types
 // ---------------------------------------------------------------------------
 
 type RelayMethod = 'gmail' | 'isp' | 'direct' | 'custom';
+
+interface MethodFormValues {
+  host: string;
+  portPreset: string;
+  customPort: string;
+  username: string;
+  password: string;
+  starttls: boolean;
+  authMethod?: string;
+}
 
 const METHOD_LABELS: Record<RelayMethod, string> = {
   gmail: 'Gmail SMTP',
@@ -37,51 +41,372 @@ const METHOD_LABELS: Record<RelayMethod, string> = {
   custom: 'Custom SMTP',
 };
 
-const METHOD_DEFAULTS: Record<RelayMethod, { host: string; port: string }> = {
-  gmail: { host: 'smtp.gmail.com', port: '587' },
-  isp: { host: '', port: '587' },
-  direct: { host: '', port: '25' },
-  custom: { host: '', port: '587' },
+const METHOD_ICONS: Record<RelayMethod, typeof Mail> = {
+  gmail: Mail,
+  isp: Server,
+  direct: Globe,
+  custom: Settings,
 };
 
-function RelayConfigTab({ domain }: { domain: Domain }) {
+const METHOD_DEFAULTS: Record<RelayMethod, MethodFormValues> = {
+  gmail: { host: 'smtp.gmail.com', portPreset: '587', customPort: '', username: '', password: '', starttls: true },
+  isp: { host: '', portPreset: '587', customPort: '', username: '', password: '', starttls: true },
+  direct: { host: '', portPreset: '25', customPort: '', username: '', password: '', starttls: false },
+  custom: { host: '', portPreset: '587', customPort: '', username: '', password: '', starttls: true },
+};
+
+const ALL_METHODS: RelayMethod[] = ['gmail', 'isp', 'direct', 'custom'];
+
+// ---------------------------------------------------------------------------
+// DNS Records Card
+// ---------------------------------------------------------------------------
+
+function DnsRecordsCard({ domain }: { domain: Domain }) {
+  return (
+    <Card className="dark:bg-slate-800">
+      <CardHeader>
+        <CardTitle className="text-base">DNS Records</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <DnsCheckTable domainId={domain.id} />
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Relay Method Sub-Card
+// ---------------------------------------------------------------------------
+
+function RelayMethodCard({
+  method,
+  values,
+  isActive,
+  isConfigured,
+  publicIP,
+  onActivate,
+  onEdit,
+}: {
+  method: RelayMethod;
+  values: MethodFormValues | null;
+  isActive: boolean;
+  isConfigured: boolean;
+  publicIP: string | null;
+  onActivate: () => void;
+  onEdit: () => void;
+}) {
+  const Icon = METHOD_ICONS[method];
+  const isLogin = values?.authMethod === 'login';
+  const showLoginWarning = isLogin && (method === 'isp' || method === 'custom');
+
+  function summaryLine(): string {
+    if (!isConfigured || !values) return 'Not configured';
+    if (method === 'direct') {
+      return publicIP ? `Public IP: ${publicIP}` : 'Deliver directly from server';
+    }
+    const port = values.portPreset === 'custom' ? values.customPort : values.portPreset;
+    const hostPart = values.host ? `${values.host}:${port}` : `port ${port}`;
+    const userPart = values.username ? ` \u2022 ${values.username}` : '';
+    return `${hostPart}${userPart}`;
+  }
+
+  return (
+    <div className={`rounded-lg border p-4 transition-colors ${
+      isActive
+        ? 'border-green-300 bg-green-50/50 dark:border-green-700 dark:bg-green-950/30'
+        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50'
+    }`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <Icon className="h-4 w-4 flex-shrink-0 text-slate-500 dark:text-slate-400" />
+          <span className="font-medium text-sm text-slate-800 dark:text-slate-100">{METHOD_LABELS[method]}</span>
+          {isActive && (
+            <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-green-200 dark:border-green-800 text-xs">
+              Active
+            </Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {isConfigured && !isActive && (
+            <Button variant="outline" size="sm" onClick={onActivate}>
+              <Zap className="h-3 w-3 mr-1" />
+              Activate
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={onEdit}>
+            {isConfigured ? (
+              <><Pencil className="h-3 w-3 mr-1" /> Edit</>
+            ) : (
+              <><PlusIcon className="h-3 w-3 mr-1" /> Setup</>
+            )}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-2 text-sm text-slate-600 dark:text-slate-400 pl-7">
+        {summaryLine()}
+      </div>
+
+      {showLoginWarning && (
+        <div className="mt-3 ml-7 p-3 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+          <div className="flex gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800 dark:text-amber-300">
+              <strong>Maddy limitation:</strong> This relay requires LOGIN authentication which Maddy
+              doesn't support. Mail sent from the web UI works (Go handles it directly),
+              but mail from external clients via port 587 will be delivered directly
+              from your server IP instead of through this relay.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {method === 'direct' && isConfigured && publicIP && (
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 pl-7">
+          Ensure <code className="font-mono bg-slate-100 dark:bg-slate-700 px-1 rounded">ip4:{publicIP}</code> is in your SPF record.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Relay Edit Dialog
+// ---------------------------------------------------------------------------
+
+function RelayEditDialog({
+  open,
+  onOpenChange,
+  method,
+  values,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  method: RelayMethod;
+  values: MethodFormValues;
+  onSave: (vals: MethodFormValues) => void;
+}) {
+  const [host, setHost] = useState(values.host);
+  const [portPreset, setPortPreset] = useState(values.portPreset);
+  const [customPort, setCustomPort] = useState(values.customPort);
+  const [username, setUsername] = useState(values.username);
+  const [password, setPassword] = useState(values.password);
+  const [starttls, setStarttls] = useState(values.starttls);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Reset form when dialog opens with new values
+  useEffect(() => {
+    if (open) {
+      setHost(values.host);
+      setPortPreset(values.portPreset);
+      setCustomPort(values.customPort);
+      setUsername(values.username);
+      setPassword(values.password);
+      setStarttls(values.starttls);
+      setShowPassword(false);
+    }
+  }, [open, values]);
+
+  function handlePortPresetChange(val: string) {
+    setPortPreset(val);
+    if (val === '587') setStarttls(true);
+    else if (val === '25') setStarttls(false);
+    else if (val === '465') setStarttls(false); // implicit TLS
+  }
+
+  function handleSave() {
+    const effectivePort = portPreset === 'custom' ? customPort : portPreset;
+    onSave({
+      host,
+      portPreset,
+      customPort,
+      username,
+      password,
+      starttls: method === 'gmail' ? true : starttls,
+      authMethod: values.authMethod,
+    });
+    // effectivePort used implicitly via portPreset/customPort
+    void effectivePort;
+    onOpenChange(false);
+  }
+
+  const isDirect = method === 'direct';
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{METHOD_LABELS[method]} Configuration</DialogTitle>
+          <DialogDescription>
+            {method === 'gmail'
+              ? 'Configure Gmail SMTP relay. Requires a Google App Password.'
+              : method === 'isp'
+              ? 'Configure your ISP mail relay.'
+              : method === 'direct'
+              ? 'Direct delivery sends mail from your server IP. No relay needed.'
+              : 'Configure a custom SMTP relay server.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        {isDirect ? (
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Mail will be delivered directly from your server without an intermediate relay.
+              Ensure your server IP is in your SPF record.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="relay-host">Host</Label>
+              <Input
+                id="relay-host"
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                placeholder={method === 'gmail' ? 'smtp.gmail.com' : 'smtp.example.com'}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="relay-port">Port</Label>
+              {method === 'gmail' ? (
+                <p className="text-sm text-slate-600 dark:text-slate-400 font-mono">587 (STARTTLS)</p>
+              ) : (
+                <>
+                  <Select value={portPreset} onValueChange={handlePortPresetChange}>
+                    <SelectTrigger id="relay-port">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="587">587 -- Submission (STARTTLS)</SelectItem>
+                      <SelectItem value="465">465 -- SMTPS (Implicit TLS)</SelectItem>
+                      <SelectItem value="25">25 -- SMTP (No encryption)</SelectItem>
+                      <SelectItem value="custom">Custom port...</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {portPreset === 'custom' && (
+                    <Input
+                      type="number"
+                      value={customPort}
+                      onChange={(e) => setCustomPort(e.target.value)}
+                      placeholder="Port number"
+                      className="mt-2"
+                    />
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="relay-username">Username</Label>
+              <Input
+                id="relay-username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder={method === 'gmail' ? 'you@gmail.com' : 'username'}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="relay-password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="relay-password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={method === 'gmail' ? 'App password' : 'Password'}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {method === 'gmail' ? (
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                STARTTLS is always enabled for Gmail.{' '}
+                <a
+                  href="https://support.google.com/accounts/answer/185833"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-slate-600"
+                >
+                  Get an App Password
+                </a>
+              </p>
+            ) : portPreset === '25' ? (
+              <p className="text-xs text-slate-400 dark:text-slate-500">Port 25 -- no encryption.</p>
+            ) : portPreset === '465' ? (
+              <p className="text-xs text-slate-400 dark:text-slate-500">Port 465 -- implicit TLS (no STARTTLS needed).</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Switch id="relay-starttls" checked={starttls} onCheckedChange={setStarttls} />
+                <Label htmlFor="relay-starttls">STARTTLS</Label>
+              </div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={handleSave}>Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Relay Configuration Card
+// ---------------------------------------------------------------------------
+
+function RelayConfigCard({ domain }: { domain: Domain }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [method, setMethod] = useState<RelayMethod>('direct');
-  const [host, setHost] = useState('');
-  const [portPreset, setPortPreset] = useState('587');
-  const [customPort, setCustomPort] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [starttls, setStarttls] = useState(true);
-  const [methodCache, setMethodCache] = useState<Record<string, { host: string; portPreset: string; customPort: string; username: string; password: string; starttls: boolean }>>({});
+  const [activeMethod, setActiveMethod] = useState<RelayMethod>('direct');
+  const [methodCache, setMethodCache] = useState<Record<string, MethodFormValues>>({});
+  const [editingMethod, setEditingMethod] = useState<RelayMethod | null>(null);
+  const [publicIP, setPublicIP] = useState<string | null>(null);
 
-  const effectivePort = portPreset === 'custom' ? customPort : portPreset;
-
+  // Load active relay config from API
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     api.get<RelayConfig>(`/domains/${domain.id}/relay`)
       .then((data) => {
-        if (!cancelled) {
-          const m = (data.method as RelayMethod) || 'direct';
-          setMethod(m);
-          setHost(data.host ?? METHOD_DEFAULTS[m].host);
-          const p = String(data.port || METHOD_DEFAULTS[m].port);
-          if (['25', '465', '587'].includes(p)) {
-            setPortPreset(p);
-            setCustomPort('');
-          } else {
-            setPortPreset('custom');
-            setCustomPort(p);
-          }
-          setUsername(data.username ?? '');
-          setPassword(((data as unknown) as { password?: string }).password ?? '');
-          setStarttls(data.starttls);
-          setLoading(false);
+        if (cancelled) return;
+        const m = (data.method as RelayMethod) || 'direct';
+        setActiveMethod(m);
+
+        // Parse API response into form values
+        const p = String(data.port || METHOD_DEFAULTS[m].portPreset);
+        let portPreset: string;
+        let customPort = '';
+        if (['25', '465', '587'].includes(p)) {
+          portPreset = p;
+        } else {
+          portPreset = 'custom';
+          customPort = p;
         }
+
+        setMethodCache({
+          [m]: {
+            host: data.host ?? METHOD_DEFAULTS[m].host,
+            portPreset,
+            customPort,
+            username: data.username ?? '',
+            password: data.password ?? '',
+            starttls: data.starttls,
+            authMethod: data.auth_method,
+          },
+        });
+        setLoading(false);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -92,71 +417,62 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
     return () => { cancelled = true; };
   }, [domain.id]);
 
-  function handleMethodChange(val: string) {
-    const m = val as RelayMethod;
-    // Save current fields for the old method
-    setMethodCache((prev) => ({
-      ...prev,
-      [method]: { host, portPreset, customPort, username, password, starttls },
-    }));
-    setMethod(m);
-    // Restore cached fields or use defaults
-    const cached = methodCache[m];
-    if (cached) {
-      setHost(cached.host);
-      setPortPreset(cached.portPreset);
-      setCustomPort(cached.customPort);
-      setUsername(cached.username);
-      setPassword(cached.password);
-      setStarttls(cached.starttls);
-    } else if (m === 'gmail') {
-      setHost('smtp.gmail.com');
-      setPortPreset('587');
-      setCustomPort('');
-      setUsername('');
-      setPassword('');
-      setStarttls(true);
-    } else if (m === 'direct') {
-      setHost('');
-      setPortPreset('25');
-      setCustomPort('');
-      setUsername('');
-      setPassword('');
-      setStarttls(false);
-    } else {
-      setHost('');
-      setPortPreset('587');
-      setCustomPort('');
-      setUsername('');
-      setPassword('');
-      setStarttls(true);
-    }
+  // Fetch public IP for direct delivery card
+  useEffect(() => {
+    api.get<PublicIPResponse>('/network/public-ip')
+      .then((data) => setPublicIP(data.ip))
+      .catch(() => setPublicIP(null));
+  }, []);
+
+  function isMethodConfigured(m: RelayMethod): boolean {
+    if (m === 'direct') return m === activeMethod || !!methodCache[m];
+    const vals = methodCache[m];
+    if (!vals) return false;
+    return !!vals.host;
   }
 
-  function handlePortPresetChange(val: string) {
-    setPortPreset(val);
-    if (val === '587') setStarttls(true);
-    else if (val === '25') setStarttls(false);
-    else if (val === '465') setStarttls(false); // implicit TLS, not STARTTLS
+  function getMethodValues(m: RelayMethod): MethodFormValues | null {
+    return methodCache[m] ?? null;
   }
 
-  async function handleSave() {
+  async function saveMethodToAPI(m: RelayMethod, vals: MethodFormValues) {
     setSaving(true);
+    const effectivePort = vals.portPreset === 'custom' ? vals.customPort : vals.portPreset;
     try {
       await api.put(`/domains/${domain.id}/relay`, {
-        method,
-        host: host || undefined,
+        method: m,
+        host: vals.host || undefined,
         port: parseInt(effectivePort, 10) || 587,
-        username: username || undefined,
-        password: password || undefined,
-        starttls: method === 'gmail' ? true : starttls,
+        username: vals.username || undefined,
+        password: vals.password || undefined,
+        starttls: m === 'gmail' ? true : vals.starttls,
       });
-      toast.success('Relay config saved');
+      toast.success(`${METHOD_LABELS[m]} saved as active relay`);
+      setActiveMethod(m);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save relay config');
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleEditSave(m: RelayMethod, vals: MethodFormValues) {
+    // Update cache
+    setMethodCache((prev) => ({ ...prev, [m]: vals }));
+    // If this is the active method, save to DB
+    if (m === activeMethod) {
+      saveMethodToAPI(m, vals);
+    }
+  }
+
+  function handleActivate(m: RelayMethod) {
+    const vals = methodCache[m] ?? METHOD_DEFAULTS[m];
+    saveMethodToAPI(m, vals);
+    setMethodCache((prev) => ({ ...prev, [m]: vals }));
+  }
+
+  function handleEdit(m: RelayMethod) {
+    setEditingMethod(m);
   }
 
   async function handleTestConnection() {
@@ -175,118 +491,60 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
     }
   }
 
-  const showFields = method !== 'direct';
+  const editingValues = editingMethod
+    ? (methodCache[editingMethod] ?? METHOD_DEFAULTS[editingMethod])
+    : METHOD_DEFAULTS.direct;
 
   return (
-    <div className="space-y-4 max-w-md">
-      {loading ? (
-        <p className="text-slate-500 dark:text-slate-400 text-sm">Loading relay config...</p>
-      ) : (
-        <>
-          <div className="space-y-2">
-            <Label htmlFor="relay-method">Method</Label>
-            <Select value={method} onValueChange={handleMethodChange}>
-              <SelectTrigger id="relay-method">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(METHOD_LABELS) as RelayMethod[]).map((m) => (
-                  <SelectItem key={m} value={m}>{METHOD_LABELS[m]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+    <Card className="dark:bg-slate-800">
+      <CardHeader>
+        <CardTitle className="text-base">Relay Configuration</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <p className="text-slate-500 dark:text-slate-400 text-sm">Loading relay config...</p>
+        ) : (
+          <div className="space-y-3">
+            {ALL_METHODS.map((m) => (
+              <RelayMethodCard
+                key={m}
+                method={m}
+                values={getMethodValues(m)}
+                isActive={m === activeMethod}
+                isConfigured={isMethodConfigured(m)}
+                publicIP={m === 'direct' ? publicIP : null}
+                onActivate={() => handleActivate(m)}
+                onEdit={() => handleEdit(m)}
+              />
+            ))}
+
+            <div className="pt-2">
+              <Button variant="outline" onClick={handleTestConnection} disabled={testing || saving}>
+                {testing ? 'Testing...' : 'Test Connection'}
+              </Button>
+            </div>
           </div>
+        )}
 
-          {method === 'direct' ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Mail will be delivered directly without an intermediate relay.
-            </p>
-          ) : null}
-
-          {showFields && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="relay-host">Host</Label>
-                <Input id="relay-host" value={host} onChange={(e) => setHost(e.target.value)}
-                  placeholder={method === 'gmail' ? 'smtp.gmail.com' : 'smtp.example.com'} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="relay-port">Port</Label>
-                {method === 'gmail' ? (
-                  <p className="text-sm text-slate-600 dark:text-slate-400 font-mono">587 (STARTTLS)</p>
-                ) : (
-                  <>
-                    <Select value={portPreset} onValueChange={handlePortPresetChange}>
-                      <SelectTrigger id="relay-port">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="587">587 — Submission (STARTTLS)</SelectItem>
-                        <SelectItem value="465">465 — SMTPS (Implicit TLS)</SelectItem>
-                        <SelectItem value="25">25 — SMTP (No encryption)</SelectItem>
-                        <SelectItem value="custom">Custom port...</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {portPreset === 'custom' && (
-                      <Input type="number" value={customPort} onChange={(e) => setCustomPort(e.target.value)}
-                        placeholder="Port number" className="mt-2" />
-                    )}
-                  </>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="relay-username">Username</Label>
-                <Input id="relay-username" value={username} onChange={(e) => setUsername(e.target.value)}
-                  placeholder={method === 'gmail' ? 'you@gmail.com' : 'username'} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="relay-password">Password</Label>
-                <div className="relative">
-                  <Input id="relay-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                    placeholder={method === 'gmail' ? 'App password' : 'Password'} />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-              {method === 'gmail' ? (
-                <p className="text-xs text-slate-400 dark:text-slate-500">STARTTLS is always enabled for Gmail.</p>
-              ) : effectivePort === '25' ? (
-                <p className="text-xs text-slate-400 dark:text-slate-500">Port 25 — no encryption.</p>
-              ) : effectivePort === '465' ? (
-                <p className="text-xs text-slate-400 dark:text-slate-500">Port 465 — implicit TLS (no STARTTLS needed).</p>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <Switch id="relay-starttls" checked={starttls} onCheckedChange={setStarttls} />
-                  <Label htmlFor="relay-starttls">STARTTLS</Label>
-                </div>
-              )}
-            </>
-          )}
-
-          <div className="flex gap-2 pt-2">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-            <Button variant="outline" onClick={handleTestConnection} disabled={testing}>
-              {testing ? 'Testing...' : 'Test Connection'}
-            </Button>
-          </div>
-        </>
-      )}
-    </div>
+        {editingMethod !== null && (
+          <RelayEditDialog
+            open={true}
+            onOpenChange={(open) => { if (!open) setEditingMethod(null); }}
+            method={editingMethod}
+            values={editingValues}
+            onSave={(vals) => handleEditSave(editingMethod, vals)}
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 // ---------------------------------------------------------------------------
-// DKIM Keys Tab
+// DKIM Keys Card
 // ---------------------------------------------------------------------------
 
-function DkimKeysTab({ domain, onRefresh }: { domain: Domain; onRefresh: () => void }) {
+function DkimKeysCard({ domain, onRefresh }: { domain: Domain; onRefresh: () => void }) {
   const [generating, setGenerating] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [newDnsValue, setNewDnsValue] = useState<string | null>(null);
@@ -314,76 +572,83 @@ function DkimKeysTab({ domain, onRefresh }: { domain: Domain; onRefresh: () => v
   }
 
   return (
-    <div className="space-y-4 max-w-lg">
-      {hasKeys ? (
-        <div className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
-          <div className="flex items-center gap-2">
-            <KeyIcon className="h-4 w-4 text-green-500" />
-            <span className="font-medium">Keys generated</span>
-          </div>
-          <div className="space-y-1 text-slate-600 dark:text-slate-400">
-            <p><span className="font-medium">Selector:</span> {domain.dkim_selector}</p>
-            <p><span className="font-medium">Key path:</span> <span className="font-mono text-xs">{domain.dkim_key_path}</span></p>
-            <p><span className="font-medium">Last updated:</span> {new Date(domain.updated_at).toLocaleString()}</p>
-          </div>
-        </div>
-      ) : (
-        <div className="text-sm text-slate-500 dark:text-slate-400 space-y-1">
-          <p>No DKIM keys generated yet.</p>
-          <p>Generate keys to enable DKIM signing for outbound mail.</p>
-        </div>
-      )}
+    <Card className="dark:bg-slate-800">
+      <CardHeader>
+        <CardTitle className="text-base">DKIM Keys</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4 max-w-lg">
+          {hasKeys ? (
+            <div className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
+              <div className="flex items-center gap-2">
+                <KeyIcon className="h-4 w-4 text-green-500" />
+                <span className="font-medium">Keys generated</span>
+              </div>
+              <div className="space-y-1 text-slate-600 dark:text-slate-400">
+                <p><span className="font-medium">Selector:</span> {domain.dkim_selector}</p>
+                <p><span className="font-medium">Key path:</span> <span className="font-mono text-xs">{domain.dkim_key_path}</span></p>
+                <p><span className="font-medium">Last updated:</span> {new Date(domain.updated_at).toLocaleString()}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-slate-500 dark:text-slate-400 space-y-1">
+              <p>No DKIM keys generated yet.</p>
+              <p>Generate keys to enable DKIM signing for outbound mail.</p>
+            </div>
+          )}
 
-      {newDnsValue && (
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">New DNS TXT record value:</p>
-          <div className="flex items-start gap-2">
-            <div className="font-mono text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded flex-1 break-all">{newDnsValue}</div>
-            <Button variant="ghost" size="icon" onClick={copyDnsValue} aria-label="Copy DNS value">
-              <CopyIcon className="h-4 w-4" />
-            </Button>
+          {newDnsValue && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">New DNS TXT record value:</p>
+              <div className="flex items-start gap-2">
+                <div className="font-mono text-xs bg-slate-100 dark:bg-slate-700 p-2 rounded flex-1 break-all">{newDnsValue}</div>
+                <Button variant="ghost" size="icon" onClick={copyDnsValue} aria-label="Copy DNS value">
+                  <CopyIcon className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Update your DNS records with this value.</p>
+            </div>
+          )}
+
+          <div>
+            {hasKeys ? (
+              <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={generating}>
+                {generating ? 'Regenerating...' : 'Regenerate Keys'}
+              </Button>
+            ) : (
+              <Button onClick={generateKeys} disabled={generating}>
+                {generating ? 'Generating...' : 'Generate DKIM Keys'}
+              </Button>
+            )}
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Update your DNS records with this value.</p>
+
+          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Regenerate DKIM Keys?</DialogTitle>
+                <DialogDescription>
+                  Warning: Regenerating keys will invalidate your existing DNS record. You will need to update your DNS with the new value.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+                <Button variant="destructive" onClick={generateKeys} disabled={generating}>
+                  {generating ? 'Regenerating...' : 'Regenerate'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
-      )}
-
-      <div>
-        {hasKeys ? (
-          <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={generating}>
-            {generating ? 'Regenerating...' : 'Regenerate Keys'}
-          </Button>
-        ) : (
-          <Button onClick={generateKeys} disabled={generating}>
-            {generating ? 'Generating...' : 'Generate DKIM Keys'}
-          </Button>
-        )}
-      </div>
-
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Regenerate DKIM Keys?</DialogTitle>
-            <DialogDescription>
-              Warning: Regenerating keys will invalidate your existing DNS record. You will need to update your DNS with the new value.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={generateKeys} disabled={generating}>
-              {generating ? 'Regenerating...' : 'Regenerate'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Settings Tab
+// Settings Card
 // ---------------------------------------------------------------------------
 
-function SettingsTab({ domain, onDeleted }: { domain: Domain; onDeleted: () => void }) {
+function SettingsCard({ domain, onDeleted }: { domain: Domain; onDeleted: () => void }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -402,36 +667,43 @@ function SettingsTab({ domain, onDeleted }: { domain: Domain; onDeleted: () => v
   }
 
   return (
-    <div className="space-y-4 max-w-md">
-      <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1">
-        <p><span className="font-medium">Domain:</span> {domain.name}</p>
-        <p><span className="font-medium">Created:</span> {new Date(domain.created_at).toLocaleString()}</p>
-      </div>
+    <Card className="dark:bg-slate-800">
+      <CardHeader>
+        <CardTitle className="text-base">Settings</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4 max-w-md">
+          <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1">
+            <p><span className="font-medium">Domain:</span> {domain.name}</p>
+            <p><span className="font-medium">Created:</span> {new Date(domain.created_at).toLocaleString()}</p>
+          </div>
 
-      <div className="pt-2">
-        <Button variant="destructive" onClick={() => setConfirmOpen(true)}>
-          <TrashIcon className="h-4 w-4 mr-2" />
-          Delete Domain
-        </Button>
-      </div>
-
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Domain?</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete <strong>{domain.name}</strong>? This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={deleting}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting ? 'Deleting...' : 'Delete'}
+          <div className="pt-2">
+            <Button variant="destructive" onClick={() => setConfirmOpen(true)}>
+              <TrashIcon className="h-4 w-4 mr-2" />
+              Delete Domain
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+          </div>
+
+          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Domain?</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete <strong>{domain.name}</strong>? This cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={deleting}>Cancel</Button>
+                <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+                  {deleting ? 'Deleting...' : 'Delete'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -585,35 +857,15 @@ export function Domains() {
         </div>
       )}
 
-      {/* Domain detail tabs */}
+      {/* Domain detail cards */}
       {selectedDomain && (
-        <Card className="dark:bg-slate-800">
-          <CardContent className="p-6">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{selectedDomain.name}</h2>
-            </div>
-            <Tabs key={selectedDomain.id} defaultValue="dns">
-              <TabsList>
-                <TabsTrigger value="dns">DNS Records</TabsTrigger>
-                <TabsTrigger value="relay">Relay Config</TabsTrigger>
-                <TabsTrigger value="dkim">DKIM Keys</TabsTrigger>
-                <TabsTrigger value="settings">Settings</TabsTrigger>
-              </TabsList>
-              <TabsContent value="dns" className="mt-4">
-                <DnsRecordsTab domain={selectedDomain} />
-              </TabsContent>
-              <TabsContent value="relay" className="mt-4">
-                <RelayConfigTab domain={selectedDomain} />
-              </TabsContent>
-              <TabsContent value="dkim" className="mt-4">
-                <DkimKeysTab domain={selectedDomain} onRefresh={handleRefresh} />
-              </TabsContent>
-              <TabsContent value="settings" className="mt-4">
-                <SettingsTab domain={selectedDomain} onDeleted={handleDeleted} />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{selectedDomain.name}</h2>
+          <DnsRecordsCard domain={selectedDomain} />
+          <RelayConfigCard key={`relay-${selectedDomain.id}`} domain={selectedDomain} />
+          <DkimKeysCard domain={selectedDomain} onRefresh={handleRefresh} />
+          <SettingsCard domain={selectedDomain} onDeleted={handleDeleted} />
+        </div>
       )}
 
       <AddDomainDialog open={addOpen} onOpenChange={setAddOpen} onCreated={handleCreated} />

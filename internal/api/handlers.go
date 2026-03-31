@@ -826,6 +826,28 @@ func (s *Server) sendViaLoginRelay(w http.ResponseWriter, from, to, subject stri
 	})
 }
 
+// handlePublicIP returns the server's public IP address.
+func (s *Server) handlePublicIP(w http.ResponseWriter, r *http.Request) {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("https://ifconfig.co")
+	if err != nil {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("Failed to detect public IP: %v", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	buf := make([]byte, 256)
+	n, _ := resp.Body.Read(buf)
+	ip := strings.TrimSpace(string(buf[:n]))
+
+	if ip == "" {
+		writeError(w, http.StatusBadGateway, "Empty response from IP detection service")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"ip": ip})
+}
+
 // handleGetTLS returns the current TLS configuration.
 func (s *Server) handleGetTLS(w http.ResponseWriter, r *http.Request) {
 	tlsConfig, err := s.db.GetTLSConfig()
