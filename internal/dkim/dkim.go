@@ -94,6 +94,37 @@ func DMARCRecordName(domain string) string {
 	return fmt.Sprintf("_dmarc.%s", domain)
 }
 
+// ValidateAndExtractPublicKey validates a PEM-encoded private key and returns the DKIM DNS record value.
+func ValidateAndExtractPublicKey(pemData []byte) (string, error) {
+	block, _ := pem.Decode(pemData)
+	if block == nil {
+		return "", fmt.Errorf("no PEM block found")
+	}
+
+	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		// Try PKCS1 format too
+		rsaKey, err2 := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err2 != nil {
+			return "", fmt.Errorf("failed to parse key (tried PKCS8 and PKCS1): %v", err)
+		}
+		key = rsaKey
+	}
+
+	rsaKey, ok := key.(*rsa.PrivateKey)
+	if !ok {
+		return "", fmt.Errorf("key is not RSA")
+	}
+
+	pubBytes, err := x509.MarshalPKIXPublicKey(&rsaKey.PublicKey)
+	if err != nil {
+		return "", fmt.Errorf("marshaling public key: %w", err)
+	}
+
+	pubB64 := base64.StdEncoding.EncodeToString(pubBytes)
+	return fmt.Sprintf("v=DKIM1; k=rsa; p=%s", pubB64), nil
+}
+
 // LoadPublicKeyDNS reads a private key file and returns the DKIM DNS record value.
 func LoadPublicKeyDNS(keyPath string) (string, error) {
 	keyPEM, err := os.ReadFile(keyPath)

@@ -84,6 +84,8 @@ func (s *Server) buildRouter() chi.Router {
 		r.Get("/api/v1/domains/{id}", s.handleGetDomain)
 		r.Delete("/api/v1/domains/{id}", s.handleDeleteDomain)
 		r.Post("/api/v1/domains/{id}/dkim/generate", s.handleGenerateDKIM)
+		r.Get("/api/v1/domains/{id}/dkim/export", s.handleExportDKIM)
+		r.Post("/api/v1/domains/{id}/dkim/import", s.handleImportDKIM)
 		r.Get("/api/v1/domains/{id}/dns", s.handleGetDNSRecords)
 		r.Get("/api/v1/domains/{id}/dns/check", s.handleDNSCheck)
 

@@ -1,5 +1,5 @@
 // web/src/pages/Domains.tsx
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/api';
 import type { Domain, RelayConfig, DKIMGenerateResponse, RelayTestResponse, PublicIPResponse } from '@/types';
@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import {
   PlusIcon, CopyIcon, KeyIcon, TrashIcon, Eye, EyeOff,
   Mail, Globe, Server, Settings, AlertTriangle, Pencil, Zap,
+  DownloadIcon, UploadIcon,
 } from 'lucide-react';
 import { DnsCheckTable } from '@/components/DnsCheckTable';
 
@@ -548,6 +549,23 @@ function DkimKeysCard({ domain, onRefresh }: { domain: Domain; onRefresh: () => 
   const [generating, setGenerating] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [newDnsValue, setNewDnsValue] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const result = await api.post<DKIMGenerateResponse>(`/domains/${domain.id}/dkim/import`, { pem: text });
+      toast.success('DKIM key imported successfully');
+      setNewDnsValue(result.dns_record_value);
+      onRefresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  }
 
   const hasKeys = Boolean(domain.dkim_key_path);
 
@@ -610,15 +628,47 @@ function DkimKeysCard({ domain, onRefresh }: { domain: Domain; onRefresh: () => 
             </div>
           )}
 
-          <div>
+          <div className="flex flex-wrap gap-2">
             {hasKeys ? (
-              <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={generating}>
-                {generating ? 'Regenerating...' : 'Regenerate Keys'}
-              </Button>
+              <>
+                <Button variant="outline" onClick={() => setConfirmOpen(true)} disabled={generating}>
+                  {generating ? 'Regenerating...' : 'Regenerate Keys'}
+                </Button>
+                <Button variant="outline" onClick={() => {
+                  window.open(`/api/v1/domains/${domain.id}/dkim/export`, '_blank');
+                }}>
+                  <DownloadIcon className="h-4 w-4 mr-1.5" />
+                  Export
+                </Button>
+                <Button variant="outline" onClick={() => importInputRef.current?.click()}>
+                  <UploadIcon className="h-4 w-4 mr-1.5" />
+                  Import
+                </Button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".pem,.key"
+                  className="hidden"
+                  onChange={handleImport}
+                />
+              </>
             ) : (
-              <Button onClick={generateKeys} disabled={generating}>
-                {generating ? 'Generating...' : 'Generate DKIM Keys'}
-              </Button>
+              <>
+                <Button onClick={generateKeys} disabled={generating}>
+                  {generating ? 'Generating...' : 'Generate DKIM Keys'}
+                </Button>
+                <Button variant="outline" onClick={() => importInputRef.current?.click()}>
+                  <UploadIcon className="h-4 w-4 mr-1.5" />
+                  Import
+                </Button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".pem,.key"
+                  className="hidden"
+                  onChange={handleImport}
+                />
+              </>
             )}
           </div>
 
@@ -844,12 +894,31 @@ export function Domains() {
                     : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <span className="font-medium text-slate-800 dark:text-slate-100">{domain.name}</span>
-                  <Badge variant={domain.active ? 'default' : 'secondary'}>
-                    {domain.active ? 'active' : 'inactive'}
-                  </Badge>
-                  <span className="text-xs text-slate-400 dark:text-slate-500">selector: {domain.dkim_selector}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium text-slate-800 dark:text-slate-100">{domain.name}</span>
+                    <Badge variant={domain.active ? 'default' : 'secondary'}>
+                      {domain.active ? 'active' : 'inactive'}
+                    </Badge>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">selector: {domain.dkim_selector}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Delete "${domain.name}"? This cannot be undone.`)) {
+                        api.del(`/domains/${domain.id}`).then(() => {
+                          toast.success(`Deleted ${domain.name}`);
+                          handleDeleted();
+                          fetchDomains();
+                        }).catch((err) => toast.error(err instanceof Error ? err.message : 'Delete failed'));
+                      }
+                    }}
+                  >
+                    <TrashIcon className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             );

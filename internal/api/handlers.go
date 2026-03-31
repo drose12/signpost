@@ -2,7 +2,9 @@ package api
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/smtp"
@@ -200,6 +202,107 @@ func (s *Server) handleGenerateDKIM(w http.ResponseWriter, r *http.Request) {
 		"dns_record_value": kp.PublicKeyDNS,
 		"selector":         kp.Selector,
 		"key_path":         kp.PrivateKeyPath,
+	})
+}
+
+// handleExportDKIM downloads the private key PEM file for a domain.
+func (s *Server) handleExportDKIM(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid domain ID")
+		return
+	}
+
+	domain, err := s.db.GetDomain(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if domain == nil {
+		writeError(w, http.StatusNotFound, "domain not found")
+		return
+	}
+	if domain.DKIMKeyPath == nil || *domain.DKIMKeyPath == "" {
+		writeError(w, http.StatusNotFound, "no DKIM key generated for this domain")
+		return
+	}
+
+	keyPEM, err := os.ReadFile(*domain.DKIMKeyPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read key file: %v", err))
+		return
+	}
+
+	filename := domain.Name + "-dkim-private.pem"
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Write(keyPEM)
+}
+
+// handleImportDKIM imports a DKIM private key PEM file for a domain.
+func (s *Server) handleImportDKIM(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid domain ID")
+		return
+	}
+
+	domain, err := s.db.GetDomain(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if domain == nil {
+		writeError(w, http.StatusNotFound, "domain not found")
+		return
+	}
+
+	// Accept either raw PEM or JSON {"pem": "..."}
+	r.Body = http.MaxBytesReader(w, r.Body, 16384)
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
+
+	var pemData []byte
+	// Try JSON first
+	var jsonReq struct {
+		PEM string `json:"pem"`
+	}
+	if err := json.Unmarshal(bodyBytes, &jsonReq); err == nil && jsonReq.PEM != "" {
+		pemData = []byte(jsonReq.PEM)
+	} else {
+		// Treat as raw PEM
+		pemData = bodyBytes
+	}
+
+	// Validate it's a valid PEM private key and extract public key DNS value
+	publicKeyDNS, err := dkim.ValidateAndExtractPublicKey(pemData)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid DKIM key: %v", err))
+		return
+	}
+
+	// Write the key to disk
+	keyPath := s.keysDir + "/" + domain.Name + ".key"
+	if err := os.WriteFile(keyPath, pemData, 0600); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to write key file: %v", err))
+		return
+	}
+
+	// Update the domain record
+	if err := s.db.UpdateDomainDKIM(id, keyPath, publicKeyDNS); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	go s.regenerateConfig()
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":           "imported",
+		"dns_record_name":  dkim.DNSRecordName(domain.DKIMSelector, domain.Name),
+		"dns_record_value": publicKeyDNS,
+		"key_path":         keyPath,
 	})
 }
 
