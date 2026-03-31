@@ -166,8 +166,8 @@ function TLSStatusCard() {
     <Card className="dark:bg-slate-800">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">TLS</CardTitle>
-        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={handleGenerate} disabled={generating || !tlsInfo}>
-          {generating ? '...' : tlsInfo?.cert_exists ? 'Regen' : 'Generate'}
+        <Button size="sm" className="h-7 px-3 text-xs" onClick={handleGenerate} disabled={generating || !tlsInfo}>
+          {generating ? 'Generating...' : tlsInfo?.cert_exists ? 'Regenerate' : 'Generate'}
         </Button>
       </CardHeader>
       <CardContent>

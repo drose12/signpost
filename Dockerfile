@@ -25,7 +25,7 @@ RUN go mod download
 COPY . .
 # Copy built frontend into the Go build context for embed
 COPY --from=frontend /build/web/dist web/dist/
-RUN CGO_ENABLED=1 go build -ldflags "-X main.version=${VERSION}" -o signpost ./cmd/signpost/
+RUN CGO_ENABLED=1 go build -o signpost ./cmd/signpost/
 
 ###############################################################################
 # Stage 3: Final image based on Maddy
