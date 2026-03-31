@@ -101,7 +101,7 @@ func main() {
 	// Start API server
 	webPort := envOrDefault("SIGNPOST_WEB_PORT", "8080")
 	hostname := "mail." + envOrDefault("SIGNPOST_DOMAIN", "localhost")
-	srv := api.NewServer(database, configGen, keysDir, adminUser, adminPass, secretKey, dataDir, hostname, web.DistFS)
+	srv := api.NewServer(database, configGen, keysDir, adminUser, adminPass, secretKey, dataDir, hostname, version, web.DistFS)
 
 	log.Printf("Starting web server on :%s", webPort)
 	if err := http.ListenAndServe(":"+webPort, srv.Handler()); err != nil {

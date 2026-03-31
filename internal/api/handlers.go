@@ -69,6 +69,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"version":         s.version,
 		"domain_count":    len(domains),
 		"tls_mode":        tlsConfig.Mode,
 		"tls_cert_expiry": tlsConfig.CertExpiry,

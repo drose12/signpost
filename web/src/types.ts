@@ -53,6 +53,7 @@ export interface Listener {
 }
 
 export interface StatusResponse {
+  version: string;
   domain_count: number;
   tls_mode: string;
   tls_cert_expiry?: string;

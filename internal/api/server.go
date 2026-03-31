@@ -27,11 +27,12 @@ type Server struct {
 	encKey    []byte  // AES-256 key derived from SIGNPOST_SECRET_KEY
 	dataDir   string  // data directory path
 	hostname  string  // mail hostname (e.g., mail.drcs.ca)
+	version   string  // app version
 	webFS     fs.FS   // embedded frontend, nil in dev
 }
 
 // NewServer creates a new API server.
-func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser, adminPass, secretKey, dataDir, hostname string, webFS fs.FS) *Server {
+func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser, adminPass, secretKey, dataDir, hostname, version string, webFS fs.FS) *Server {
 	var encKey []byte
 	if secretKey != "" {
 		var err error
@@ -49,6 +50,7 @@ func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser,
 		encKey:    encKey,
 		dataDir:   dataDir,
 		hostname:  hostname,
+		version:   version,
 		webFS:     webFS,
 	}
 	s.router = s.buildRouter()

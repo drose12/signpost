@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Globe, Mail, Users, Wand2, Sun, Moon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../api';
+import type { StatusResponse } from '../types';
 import { getTheme, setTheme } from '../theme';
 
 const navItems = [
@@ -13,6 +15,11 @@ const navItems = [
 
 export function Sidebar() {
   const [theme, setThemeState] = useState(getTheme());
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    api.get<StatusResponse>('/status').then((data) => setVersion(data.version || 'dev')).catch(() => {});
+  }, []);
 
   function toggleTheme() {
     const next = theme === 'light' ? 'dark' : 'light';
@@ -51,8 +58,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Theme toggle */}
-      <div className="px-4 py-4 border-t border-slate-700">
+      {/* Theme toggle + version */}
+      <div className="px-4 py-4 border-t border-slate-700 space-y-2">
         <button
           onClick={toggleTheme}
           className="flex items-center gap-2 text-slate-400 hover:text-white text-sm"
@@ -60,6 +67,9 @@ export function Sidebar() {
           {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
           {theme === 'light' ? 'Dark mode' : 'Light mode'}
         </button>
+        {version && (
+          <p className="text-xs text-slate-500">{version}</p>
+        )}
       </div>
     </aside>
   );
