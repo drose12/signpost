@@ -21,9 +21,10 @@ web/dist/
 .env.local
 .env.production
 
-# IDE
+# IDE / Tools
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 *~
