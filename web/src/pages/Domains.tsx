@@ -103,7 +103,7 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
         port: parseInt(port, 10) || 25,
         username: username || undefined,
         password: password || undefined,
-        starttls,
+        starttls: method === 'gmail' ? true : starttls,
       });
       toast.success('Relay config saved');
     } catch (err) {
@@ -187,10 +187,14 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
                   </button>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Switch id="relay-starttls" checked={starttls} onCheckedChange={setStarttls} />
-                <Label htmlFor="relay-starttls">STARTTLS</Label>
-              </div>
+              {method === 'gmail' ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">STARTTLS is always enabled for Gmail.</p>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <Switch id="relay-starttls" checked={starttls} onCheckedChange={setStarttls} />
+                  <Label htmlFor="relay-starttls">STARTTLS</Label>
+                </div>
+              )}
             </>
           )}
 

@@ -95,15 +95,16 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
             </Alert>
           )}
 
-          <Table>
+          <div className="overflow-x-auto">
+          <Table className="table-fixed w-full">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-24">Record</TableHead>
-                <TableHead>FQDN</TableHead>
-                <TableHead className="w-32">Status</TableHead>
+                <TableHead className="w-[80px]">Record</TableHead>
+                <TableHead className="w-[200px]">FQDN</TableHead>
+                <TableHead className="w-[120px]">Status</TableHead>
                 <TableHead>Current Value</TableHead>
                 <TableHead>Recommended Value</TableHead>
-                <TableHead className="w-16"></TableHead>
+                <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -124,17 +125,17 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
                     </div>
                   </TableCell>
                   <TableCell>{statusBadge(record.status)}</TableCell>
-                  <TableCell>
-                    <div className="font-mono text-xs max-w-xs break-all text-slate-600 dark:text-slate-400">
+                  <TableCell className="align-top">
+                    <div className="font-mono text-xs break-all whitespace-normal text-slate-600 dark:text-slate-400">
                       {record.current ?? <span className="italic text-slate-400 dark:text-slate-500">Not found</span>}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="align-top">
                     <div className="space-y-1">
                       {record.status === 'ok' ? (
                         <span className="text-xs text-green-600 dark:text-green-400">No change needed</span>
                       ) : (
-                        <div className="font-mono text-xs max-w-xs break-all">{record.recommended}</div>
+                        <div className="font-mono text-xs break-all whitespace-normal">{record.recommended}</div>
                       )}
                       <div className="text-xs text-slate-400 dark:text-slate-500">{record.message}</div>
                     </div>
@@ -150,6 +151,7 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
               ))}
             </TableBody>
           </Table>
+          </div>
         </>
       )}
     </div>
