@@ -116,6 +116,7 @@ func TestPerformDNSCheck_SPFAlreadyIncludesGmail(t *testing.T) {
 
 	lookup := fakeLookupTXT(map[string][]string{
 		"example.com":        {"v=spf1 include:_spf.google.com ~all"},
+		"_spf.google.com":    {"v=spf1 ip4:209.85.128.0/17 ~all"},
 		"_dmarc.example.com": {"v=DMARC1; p=none"},
 	})
 

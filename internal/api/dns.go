@@ -144,8 +144,13 @@ func checkSPF(domainName string, relay *db.RelayConfig, lookupTXT dnsLookupFunc)
 
 	current := existingSPF
 
+	// Check for broken include: entries (hosts with no SPF record)
+	brokenIncludes := findBrokenIncludes(existingSPF, lookupTXT)
+
 	// Check if the needed mechanism is already present
-	if neededMechanism != "" && strings.Contains(existingSPF, neededMechanism) {
+	mechanismPresent := neededMechanism != "" && strings.Contains(existingSPF, neededMechanism)
+
+	if mechanismPresent && len(brokenIncludes) == 0 {
 		return dnsCheckRecord{
 			Type:        "TXT",
 			Name:        domainName,
@@ -157,9 +162,7 @@ func checkSPF(domainName string, relay *db.RelayConfig, lookupTXT dnsLookupFunc)
 		}
 	}
 
-	if neededMechanism == "" {
-		// No specific mechanism needed (direct delivery or no relay)
-		// Just check that a basic SPF exists
+	if neededMechanism == "" && len(brokenIncludes) == 0 {
 		return dnsCheckRecord{
 			Type:        "TXT",
 			Name:        domainName,
@@ -171,16 +174,35 @@ func checkSPF(domainName string, relay *db.RelayConfig, lookupTXT dnsLookupFunc)
 		}
 	}
 
-	// SPF exists but doesn't contain the needed mechanism — suggest merge
-	merged := mergeSPF(existingSPF, neededMechanism)
+	// Build the recommended SPF by fixing issues
+	fixedSPF := existingSPF
+	var issues []string
+
+	// Remove broken includes
+	for _, broken := range brokenIncludes {
+		fixedSPF = strings.Replace(fixedSPF, " include:"+broken, "", 1)
+		issues = append(issues, fmt.Sprintf("remove include:%s (no SPF record, causes permerror)", broken))
+	}
+
+	// Add missing mechanism
+	if neededMechanism != "" && !strings.Contains(fixedSPF, neededMechanism) {
+		fixedSPF = mergeSPF(fixedSPF, neededMechanism)
+		issues = append(issues, fmt.Sprintf("add %s", neededMechanism))
+	}
+
+	// Clean up any double spaces from removals
+	for strings.Contains(fixedSPF, "  ") {
+		fixedSPF = strings.Replace(fixedSPF, "  ", " ", -1)
+	}
+
 	return dnsCheckRecord{
 		Type:        "TXT",
 		Name:        domainName,
 		Purpose:     "spf",
 		Current:     &current,
-		Recommended: merged,
+		Recommended: fixedSPF,
 		Status:      "update",
-		Message:     fmt.Sprintf("SPF record exists but does not include %s. Update to the recommended value.", neededMechanism),
+		Message:     "SPF needs updating: " + strings.Join(issues, "; "),
 	}
 }
 
@@ -324,4 +346,33 @@ func mergeSPF(existing, mechanism string) string {
 	}
 	// No all qualifier found — append mechanism
 	return existing + " " + mechanism
+}
+
+// findBrokenIncludes checks each include: in an SPF record and returns any that
+// don't have a valid SPF record (which causes permerror on SPF evaluation).
+func findBrokenIncludes(spf string, lookupTXT dnsLookupFunc) []string {
+	var broken []string
+	parts := strings.Fields(spf)
+	for _, part := range parts {
+		if !strings.HasPrefix(part, "include:") {
+			continue
+		}
+		host := strings.TrimPrefix(part, "include:")
+		txts, err := lookupTXT(host)
+		if err != nil {
+			broken = append(broken, host)
+			continue
+		}
+		hasSPF := false
+		for _, txt := range txts {
+			if strings.HasPrefix(txt, "v=spf1") {
+				hasSPF = true
+				break
+			}
+		}
+		if !hasSPF {
+			broken = append(broken, host)
+		}
+	}
+	return broken
 }
