@@ -1,6 +1,7 @@
 package db
 
 import (
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -12,13 +13,19 @@ func TestHashPassword(t *testing.T) {
 		t.Fatalf("HashPassword: %v", err)
 	}
 
-	// Verify it's a valid bcrypt hash
-	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte("testpassword")); err != nil {
+	// Verify it has the bcrypt: prefix for Maddy
+	if !strings.HasPrefix(hash, "bcrypt:$2") {
+		t.Errorf("expected bcrypt: prefix, got %s", hash[:20])
+	}
+
+	// Strip prefix and verify with bcrypt
+	rawHash := strings.TrimPrefix(hash, "bcrypt:")
+	if err := bcrypt.CompareHashAndPassword([]byte(rawHash), []byte("testpassword")); err != nil {
 		t.Errorf("bcrypt hash verification failed: %v", err)
 	}
 
 	// Verify wrong password fails
-	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte("wrong")); err == nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(rawHash), []byte("wrong")); err == nil {
 		t.Error("expected bcrypt verification to fail for wrong password")
 	}
 }
@@ -148,7 +155,8 @@ func TestUpdateSMTPUserPassword(t *testing.T) {
 
 	// Verify new hash
 	got, _ := db.GetSMTPUser(user.ID)
-	if err := bcrypt.CompareHashAndPassword([]byte(got.PasswordHash), []byte("newpassword1")); err != nil {
+	rawHash := strings.TrimPrefix(got.PasswordHash, "bcrypt:")
+	if err := bcrypt.CompareHashAndPassword([]byte(rawHash), []byte("newpassword1")); err != nil {
 		t.Error("new password hash verification failed")
 	}
 

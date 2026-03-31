@@ -9,13 +9,13 @@ import (
 )
 
 // HashPassword generates a bcrypt hash from a plaintext password.
-// Maddy's auth.pass_table expects standard bcrypt format ($2a$...).
+// Maddy's auth.pass_table expects the {bcrypt} tag prefix.
 func HashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return "", fmt.Errorf("hashing password: %w", err)
 	}
-	return string(hash), nil
+	return "bcrypt:" + string(hash), nil
 }
 
 // ListSMTPUsers returns all SMTP users.
