@@ -106,4 +106,8 @@ var migrations = []string{
 	// Migration 3: Add port enable/disable settings
 	`INSERT OR IGNORE INTO settings (key, value) VALUES ('smtp_enabled', 'true');
 	 INSERT OR IGNORE INTO settings (key, value) VALUES ('submission_enabled', 'false');`,
+
+	// Migration 4: Add encrypted password columns to smtp_users for display
+	`ALTER TABLE smtp_users ADD COLUMN password_enc TEXT;
+	 ALTER TABLE smtp_users ADD COLUMN password_nonce TEXT;`,
 }

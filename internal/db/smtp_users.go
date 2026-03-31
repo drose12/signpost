@@ -20,7 +20,7 @@ func HashPassword(password string) (string, error) {
 
 // ListSMTPUsers returns all SMTP users.
 func (db *DB) ListSMTPUsers() ([]SMTPUser, error) {
-	rows, err := db.Query(`SELECT id, username, password_hash, active, created_at, updated_at
+	rows, err := db.Query(`SELECT id, username, password_hash, password_enc, password_nonce, active, created_at, updated_at
 		FROM smtp_users ORDER BY username`)
 	if err != nil {
 		return nil, fmt.Errorf("listing SMTP users: %w", err)
@@ -30,7 +30,7 @@ func (db *DB) ListSMTPUsers() ([]SMTPUser, error) {
 	var users []SMTPUser
 	for rows.Next() {
 		var u SMTPUser
-		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Active, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.PasswordEnc, &u.PasswordNonce, &u.Active, &u.CreatedAt, &u.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scanning SMTP user: %w", err)
 		}
 		users = append(users, u)
@@ -41,9 +41,9 @@ func (db *DB) ListSMTPUsers() ([]SMTPUser, error) {
 // GetSMTPUser returns a single SMTP user by ID.
 func (db *DB) GetSMTPUser(id int64) (*SMTPUser, error) {
 	var u SMTPUser
-	err := db.QueryRow(`SELECT id, username, password_hash, active, created_at, updated_at
+	err := db.QueryRow(`SELECT id, username, password_hash, password_enc, password_nonce, active, created_at, updated_at
 		FROM smtp_users WHERE id = ?`, id).Scan(
-		&u.ID, &u.Username, &u.PasswordHash, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+		&u.ID, &u.Username, &u.PasswordHash, &u.PasswordEnc, &u.PasswordNonce, &u.Active, &u.CreatedAt, &u.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -53,10 +53,10 @@ func (db *DB) GetSMTPUser(id int64) (*SMTPUser, error) {
 	return &u, nil
 }
 
-// CreateSMTPUser creates a new SMTP user with a bcrypt-hashed password.
-func (db *DB) CreateSMTPUser(username, passwordHash string) (*SMTPUser, error) {
-	result, err := db.Exec(`INSERT INTO smtp_users (username, password_hash) VALUES (?, ?)`,
-		username, passwordHash)
+// CreateSMTPUser creates a new SMTP user with a bcrypt-hashed password and optional encrypted password for display.
+func (db *DB) CreateSMTPUser(username, passwordHash string, passwordEnc, passwordNonce *string) (*SMTPUser, error) {
+	result, err := db.Exec(`INSERT INTO smtp_users (username, password_hash, password_enc, password_nonce) VALUES (?, ?, ?, ?)`,
+		username, passwordHash, passwordEnc, passwordNonce)
 	if err != nil {
 		return nil, fmt.Errorf("creating SMTP user %q: %w", username, err)
 	}
@@ -83,11 +83,11 @@ func (db *DB) DeleteSMTPUser(id int64) error {
 	return nil
 }
 
-// UpdateSMTPUserPassword updates the password hash for an SMTP user.
-func (db *DB) UpdateSMTPUserPassword(id int64, passwordHash string) error {
+// UpdateSMTPUserPassword updates the password hash and encrypted password for an SMTP user.
+func (db *DB) UpdateSMTPUserPassword(id int64, passwordHash string, passwordEnc, passwordNonce *string) error {
 	now := time.Now()
-	result, err := db.Exec(`UPDATE smtp_users SET password_hash = ?, updated_at = ? WHERE id = ?`,
-		passwordHash, now, id)
+	result, err := db.Exec(`UPDATE smtp_users SET password_hash = ?, password_enc = ?, password_nonce = ?, updated_at = ? WHERE id = ?`,
+		passwordHash, passwordEnc, passwordNonce, now, id)
 	if err != nil {
 		return fmt.Errorf("updating SMTP user %d password: %w", id, err)
 	}

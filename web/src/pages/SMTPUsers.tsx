@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Users, Plus, Trash2, KeyRound } from 'lucide-react';
+import { Users, Plus, Trash2, KeyRound, Eye, EyeOff } from 'lucide-react';
 
 function formatTime(ts: string): string {
   try {
@@ -52,6 +52,16 @@ export function SMTPUsers() {
   // Delete confirmation dialog
   const [deleteUser, setDeleteUser] = useState<SMTPUser | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<number>>(new Set());
+
+  function togglePasswordVisibility(id: number) {
+    setVisiblePasswords((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -162,8 +172,9 @@ export function SMTPUsers() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-24">Status</TableHead>
                   <TableHead>Username</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Password</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -171,11 +182,33 @@ export function SMTPUsers() {
               <TableBody>
                 {users.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell className="text-sm font-medium">{user.username}</TableCell>
                     <TableCell>
                       <Badge variant={user.active ? 'default' : 'secondary'}>
                         {user.active ? 'Active' : 'Inactive'}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm font-medium">{user.username}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-mono text-slate-600 dark:text-slate-400">
+                          {user.password
+                            ? visiblePasswords.has(user.id) ? user.password : '••••••••'
+                            : <span className="italic text-slate-400">—</span>
+                          }
+                        </span>
+                        {user.password && (
+                          <button
+                            type="button"
+                            onClick={() => togglePasswordVisibility(user.id)}
+                            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                          >
+                            {visiblePasswords.has(user.id)
+                              ? <EyeOff className="h-3.5 w-3.5" />
+                              : <Eye className="h-3.5 w-3.5" />
+                            }
+                          </button>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
                       {formatTime(user.created_at)}

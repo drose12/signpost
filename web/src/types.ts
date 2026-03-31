@@ -97,6 +97,7 @@ export interface DNSCheckResponse {
 export interface SMTPUser {
   id: number;
   username: string;
+  password?: string;
   active: boolean;
   created_at: string;
   updated_at: string;

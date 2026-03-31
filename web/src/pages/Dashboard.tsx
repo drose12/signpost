@@ -142,10 +142,15 @@ function SMTPPortsCard() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [userCount, setUserCount] = useState(0);
 
   useEffect(() => {
-    api.get<Record<string, string>>('/settings').then((data) => {
-      setSettings(data);
+    Promise.all([
+      api.get<Record<string, string>>('/settings'),
+      api.get<unknown[]>('/smtp-users'),
+    ]).then(([settingsData, users]) => {
+      setSettings(settingsData);
+      setUserCount(users.length);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -199,9 +204,19 @@ function SMTPPortsCard() {
             disabled={toggling !== null}
           />
         </div>
-        {submissionEnabled && settings.submission_enabled === 'true' && (
+        {submissionEnabled && userCount > 0 && (
+          <p className="text-xs text-green-600 dark:text-green-400">
+            Authenticated submission active with {userCount} user{userCount !== 1 ? 's' : ''} configured.
+          </p>
+        )}
+        {submissionEnabled && userCount === 0 && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            Note: Submission requires at least one SMTP user to be configured.
+            Submission enabled but no SMTP users configured. <a href="/smtp-users" className="underline">Add a user</a> to accept connections.
+          </p>
+        )}
+        {!submissionEnabled && userCount > 0 && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {userCount} user{userCount !== 1 ? 's' : ''} configured. Enable submission to accept authenticated connections.
           </p>
         )}
       </CardContent>

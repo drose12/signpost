@@ -35,12 +35,14 @@ type RelayConfig struct {
 
 // SMTPUser represents a user authorized to send via port 587.
 type SMTPUser struct {
-	ID           int64     `json:"id"`
-	Username     string    `json:"username"`
-	PasswordHash string    `json:"-"` // never exposed in JSON
-	Active       bool      `json:"active"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID            int64     `json:"id"`
+	Username      string    `json:"username"`
+	PasswordHash  string    `json:"-"`              // bcrypt hash for Maddy auth
+	PasswordEnc   *string   `json:"-"`              // AES-GCM encrypted for display
+	PasswordNonce *string   `json:"-"`              // nonce for decryption
+	Active        bool      `json:"active"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // TLSConfig holds the TLS/certificate configuration.

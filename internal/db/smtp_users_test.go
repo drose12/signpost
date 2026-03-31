@@ -27,7 +27,7 @@ func TestCreateSMTPUser(t *testing.T) {
 	db := testDB(t)
 
 	hash, _ := HashPassword("testpass123")
-	user, err := db.CreateSMTPUser("user@drcs.ca", hash)
+	user, err := db.CreateSMTPUser("user@drcs.ca", hash, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateSMTPUser: %v", err)
 	}
@@ -46,12 +46,12 @@ func TestCreateDuplicateSMTPUser(t *testing.T) {
 	db := testDB(t)
 
 	hash, _ := HashPassword("testpass123")
-	_, err := db.CreateSMTPUser("user@drcs.ca", hash)
+	_, err := db.CreateSMTPUser("user@drcs.ca", hash, nil, nil)
 	if err != nil {
 		t.Fatalf("first CreateSMTPUser: %v", err)
 	}
 
-	_, err = db.CreateSMTPUser("user@drcs.ca", hash)
+	_, err = db.CreateSMTPUser("user@drcs.ca", hash, nil, nil)
 	if err == nil {
 		t.Error("expected error creating duplicate SMTP user")
 	}
@@ -72,8 +72,8 @@ func TestListSMTPUsers(t *testing.T) {
 	// Create two users
 	hash1, _ := HashPassword("testpass123")
 	hash2, _ := HashPassword("otherpass123")
-	db.CreateSMTPUser("alice@drcs.ca", hash1)
-	db.CreateSMTPUser("bob@drcs.ca", hash2)
+	db.CreateSMTPUser("alice@drcs.ca", hash1, nil, nil)
+	db.CreateSMTPUser("bob@drcs.ca", hash2, nil, nil)
 
 	users, err = db.ListSMTPUsers()
 	if err != nil {
@@ -88,7 +88,7 @@ func TestGetSMTPUser(t *testing.T) {
 	db := testDB(t)
 
 	hash, _ := HashPassword("testpass123")
-	created, _ := db.CreateSMTPUser("user@drcs.ca", hash)
+	created, _ := db.CreateSMTPUser("user@drcs.ca", hash, nil, nil)
 
 	got, err := db.GetSMTPUser(created.ID)
 	if err != nil {
@@ -115,7 +115,7 @@ func TestDeleteSMTPUser(t *testing.T) {
 	db := testDB(t)
 
 	hash, _ := HashPassword("testpass123")
-	user, _ := db.CreateSMTPUser("user@drcs.ca", hash)
+	user, _ := db.CreateSMTPUser("user@drcs.ca", hash, nil, nil)
 
 	err := db.DeleteSMTPUser(user.ID)
 	if err != nil {
@@ -138,10 +138,10 @@ func TestUpdateSMTPUserPassword(t *testing.T) {
 	db := testDB(t)
 
 	hash, _ := HashPassword("oldpassword1")
-	user, _ := db.CreateSMTPUser("user@drcs.ca", hash)
+	user, _ := db.CreateSMTPUser("user@drcs.ca", hash, nil, nil)
 
 	newHash, _ := HashPassword("newpassword1")
-	err := db.UpdateSMTPUserPassword(user.ID, newHash)
+	err := db.UpdateSMTPUserPassword(user.ID, newHash, nil, nil)
 	if err != nil {
 		t.Fatalf("UpdateSMTPUserPassword: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestUpdateSMTPUserPassword(t *testing.T) {
 	}
 
 	// Update nonexistent
-	err = db.UpdateSMTPUserPassword(999, newHash)
+	err = db.UpdateSMTPUserPassword(999, newHash, nil, nil)
 	if err == nil {
 		t.Error("expected error updating nonexistent user")
 	}
@@ -171,7 +171,7 @@ func TestCountSMTPUsers(t *testing.T) {
 	}
 
 	hash, _ := HashPassword("testpass123")
-	db.CreateSMTPUser("user@drcs.ca", hash)
+	db.CreateSMTPUser("user@drcs.ca", hash, nil, nil)
 
 	count, _ = db.CountSMTPUsers()
 	if count != 1 {

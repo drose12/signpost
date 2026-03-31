@@ -8,20 +8,44 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/drose-drcs/signpost/internal/crypto"
 	"github.com/drose-drcs/signpost/internal/db"
 )
 
-// handleListSMTPUsers returns all SMTP users (password_hash excluded by json:"-").
+// handleListSMTPUsers returns all SMTP users with decrypted passwords.
 func (s *Server) handleListSMTPUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := s.db.ListSMTPUsers()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if users == nil {
-		users = []db.SMTPUser{}
+
+	type userResponse struct {
+		ID        int64  `json:"id"`
+		Username  string `json:"username"`
+		Password  string `json:"password,omitempty"`
+		Active    bool   `json:"active"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
 	}
-	writeJSON(w, http.StatusOK, users)
+
+	resp := make([]userResponse, 0, len(users))
+	for _, u := range users {
+		ur := userResponse{
+			ID:        u.ID,
+			Username:  u.Username,
+			Active:    u.Active,
+			CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			UpdatedAt: u.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		}
+		if u.PasswordEnc != nil && u.PasswordNonce != nil && s.encKey != nil {
+			if pw, err := crypto.Decrypt(s.encKey, *u.PasswordEnc, *u.PasswordNonce); err == nil {
+				ur.Password = pw
+			}
+		}
+		resp = append(resp, ur)
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleCreateSMTPUser creates a new SMTP user with bcrypt-hashed password.
@@ -53,7 +77,17 @@ func (s *Server) handleCreateSMTPUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.db.CreateSMTPUser(req.Username, hash)
+	// Encrypt password for display
+	var passEnc, passNonce *string
+	if s.encKey != nil {
+		enc, nonce, err := crypto.Encrypt(s.encKey, req.Password)
+		if err == nil {
+			passEnc = &enc
+			passNonce = &nonce
+		}
+	}
+
+	user, err := s.db.CreateSMTPUser(req.Username, hash, passEnc, passNonce)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			writeError(w, http.StatusConflict, fmt.Sprintf("username %q already exists", req.Username))
@@ -126,7 +160,17 @@ func (s *Server) handleUpdateSMTPUserPassword(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := s.db.UpdateSMTPUserPassword(id, hash); err != nil {
+	// Encrypt password for display
+	var passEnc, passNonce *string
+	if s.encKey != nil {
+		enc, nonce, err := crypto.Encrypt(s.encKey, req.Password)
+		if err == nil {
+			passEnc = &enc
+			passNonce = &nonce
+		}
+	}
+
+	if err := s.db.UpdateSMTPUserPassword(id, hash, passEnc, passNonce); err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
