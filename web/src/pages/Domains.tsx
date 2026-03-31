@@ -902,6 +902,7 @@ export function Domains() {
         <div className="space-y-2">
           {domains.map((domain) => {
             const isSelected = domain.id === selectedId;
+            const isHealthy = Boolean(domain.dkim_key_path);
             return (
               <div
                 key={domain.id}
@@ -914,11 +915,11 @@ export function Domains() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isHealthy ? 'bg-green-500' : 'bg-amber-500'}`} />
                     <span className="font-medium text-slate-800 dark:text-slate-100">{domain.name}</span>
-                    <Badge variant={domain.active ? 'default' : 'secondary'}>
-                      {domain.active ? 'active' : 'inactive'}
-                    </Badge>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">selector: {domain.dkim_selector}</span>
+                    {!isHealthy && (
+                      <span className="text-xs text-amber-600 dark:text-amber-400">Setup incomplete</span>
+                    )}
                   </div>
                   <Button
                     variant="ghost"
