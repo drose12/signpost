@@ -29,10 +29,13 @@ export function Sidebar() {
 
   return (
     <aside className="w-[200px] min-h-screen bg-slate-900 flex flex-col shrink-0">
-      {/* Logo */}
-      <div className="px-4 py-5 flex items-center gap-2">
-        <Mail className="text-sky-400 w-5 h-5" />
-        <span className="text-sky-400 font-semibold text-lg">SignPost</span>
+      {/* Logo + version */}
+      <div className="px-4 py-5">
+        <div className="flex items-center gap-2">
+          <Mail className="text-sky-400 w-5 h-5" />
+          <span className="text-sky-400 font-semibold text-lg">SignPost</span>
+        </div>
+        {version && <p className="text-xs text-slate-500 mt-1 pl-7">{version}</p>}
       </div>
 
       <div className="border-b border-slate-700 mx-4" />
@@ -58,8 +61,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Theme toggle + version */}
-      <div className="px-4 py-4 border-t border-slate-700 space-y-2">
+      {/* Theme toggle */}
+      <div className="px-4 py-4 border-t border-slate-700">
         <button
           onClick={toggleTheme}
           className="flex items-center gap-2 text-slate-400 hover:text-white text-sm"
@@ -67,9 +70,6 @@ export function Sidebar() {
           {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
           {theme === 'light' ? 'Dark mode' : 'Light mode'}
         </button>
-        {version && (
-          <p className="text-xs text-slate-500">{version}</p>
-        )}
       </div>
     </aside>
   );

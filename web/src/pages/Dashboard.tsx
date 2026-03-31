@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
-import { ServerIcon, GlobeIcon, ShieldIcon, InfoIcon, NetworkIcon, Send, PlugIcon } from 'lucide-react';
+import { ServerIcon, GlobeIcon, InfoIcon, Send } from 'lucide-react';
 
 function formatTime(ts: string): string {
   try {
@@ -138,7 +138,7 @@ function TestEmailCard() {
   );
 }
 
-function TLSCard() {
+function TLSStatusCard() {
   const [tlsInfo, setTlsInfo] = useState<{ mode: string; cert_path?: string; cert_exists?: boolean } | null>(null);
   const [generating, setGenerating] = useState(false);
 
@@ -162,34 +162,21 @@ function TLSCard() {
     }
   }
 
-  if (!tlsInfo) return null;
-
   return (
     <Card className="dark:bg-slate-800">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">TLS Certificate</CardTitle>
-        <ShieldIcon className="h-4 w-4 text-slate-400" />
+        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">TLS</CardTitle>
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={handleGenerate} disabled={generating || !tlsInfo}>
+          {generating ? '...' : tlsInfo?.cert_exists ? 'Regen' : 'Generate'}
+        </Button>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-slate-800 dark:text-slate-100">
-              Mode: <span className="font-medium capitalize">{tlsInfo.mode || 'self-signed'}</span>
-            </p>
-            {tlsInfo.cert_path && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">{tlsInfo.cert_path}</p>
-            )}
-            {tlsInfo.cert_exists === true && (
-              <p className="text-xs text-green-600 dark:text-green-400 mt-1">Certificate active</p>
-            )}
-            {tlsInfo.cert_exists === false && (
-              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Certificate file missing</p>
-            )}
-          </div>
-          <Button variant="outline" size="sm" onClick={handleGenerate} disabled={generating}>
-            <ShieldIcon className="h-3.5 w-3.5 mr-1.5" />
-            {generating ? 'Generating...' : tlsInfo.cert_exists ? 'Regenerate' : 'Generate'}
-          </Button>
+      <CardContent>
+        <div className="flex items-center gap-2">
+          {tlsInfo?.cert_exists && <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />}
+          {tlsInfo?.cert_exists === false && <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />}
+          <span className="text-lg font-semibold text-slate-800 dark:text-slate-100 capitalize">
+            {tlsInfo?.mode || '—'}
+          </span>
         </div>
       </CardContent>
     </Card>
@@ -235,11 +222,7 @@ function SMTPPortsCard() {
 
   return (
     <Card className="dark:bg-slate-800">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">SMTP Ports</CardTitle>
-        <PlugIcon className="h-4 w-4 text-slate-400" />
-      </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="pt-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Port 25 (SMTP)</p>
@@ -252,9 +235,21 @@ function SMTPPortsCard() {
           />
         </div>
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Port 587 (Submission)</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Requires SMTP AUTH (username/password)</p>
+          <div className="flex items-center gap-2">
+            <div>
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                Port 587 (Submission)
+                {submissionEnabled && userCount > 0 && (
+                  <span className="text-xs font-normal text-green-600 dark:text-green-400 ml-2">({userCount} user{userCount !== 1 ? 's' : ''} configured)</span>
+                )}
+              </p>
+              {submissionEnabled && userCount === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">No users — <a href="/smtp-users" className="underline">add one</a></p>
+              )}
+              {!submissionEnabled && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">SMTP AUTH (username/password)</p>
+              )}
+            </div>
           </div>
           <Switch
             checked={submissionEnabled}
@@ -262,21 +257,6 @@ function SMTPPortsCard() {
             disabled={toggling !== null}
           />
         </div>
-        {submissionEnabled && userCount > 0 && (
-          <p className="text-xs text-green-600 dark:text-green-400">
-            Authenticated submission active with {userCount} user{userCount !== 1 ? 's' : ''} configured.
-          </p>
-        )}
-        {submissionEnabled && userCount === 0 && (
-          <p className="text-xs text-amber-600 dark:text-amber-400">
-            Submission enabled but no SMTP users configured. <a href="/smtp-users" className="underline">Add a user</a> to accept connections.
-          </p>
-        )}
-        {!submissionEnabled && userCount > 0 && (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {userCount} user{userCount !== 1 ? 's' : ''} configured. Enable submission to accept authenticated connections.
-          </p>
-        )}
       </CardContent>
     </Card>
   );
@@ -347,23 +327,11 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{status?.domain_count ?? 0}</div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Domains</p>
           </CardContent>
         </Card>
 
-        <Card className="dark:bg-slate-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">TLS</CardTitle>
-            <ShieldIcon className="h-4 w-4 text-slate-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-lg font-semibold text-slate-800 dark:text-slate-100 capitalize">{status?.tls_mode ?? '—'}</div>
-          </CardContent>
-        </Card>
+        <TLSStatusCard />
       </div>
-
-      {/* TLS Management */}
-      <TLSCard />
 
       {/* SMTP Ports */}
       <SMTPPortsCard />
@@ -371,10 +339,6 @@ export function Dashboard() {
       {/* Listeners */}
       {status?.listeners && status.listeners.length > 0 && (
         <Card className="dark:bg-slate-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">Listeners</CardTitle>
-            <NetworkIcon className="h-4 w-4 text-slate-400" />
-          </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
