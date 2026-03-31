@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -316,7 +317,8 @@ function StepConfigureRelay({
 }) {
   const defaults = METHOD_DEFAULTS[method];
   const [host, setHost] = useState(defaults.host);
-  const [port, setPort] = useState(defaults.port);
+  const [portPreset, setPortPreset] = useState(defaults.port);
+  const [customPort, setCustomPort] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [starttls, setStarttls] = useState(defaults.starttls);
@@ -324,13 +326,22 @@ function StepConfigureRelay({
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
+  const effectivePort = portPreset === 'custom' ? customPort : portPreset;
+
+  function handlePortPresetChange(val: string) {
+    setPortPreset(val);
+    if (val === '587') setStarttls(true);
+    else if (val === '25') setStarttls(false);
+    else if (val === '465') setStarttls(false);
+  }
+
   async function handleSave() {
     setSaving(true);
     try {
       await api.put(`/domains/${domainId}/relay`, {
         method,
         host: host || undefined,
-        port: parseInt(port, 10) || 25,
+        port: parseInt(effectivePort, 10) || 587,
         username: username || undefined,
         password: password || undefined,
         starttls: method === 'gmail' ? true : starttls,
@@ -413,12 +424,27 @@ function StepConfigureRelay({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="wiz-relay-port">Port</Label>
-                <Input
-                  id="wiz-relay-port"
-                  type="number"
-                  value={port}
-                  onChange={(e) => setPort(e.target.value)}
-                />
+                {method === 'gmail' ? (
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-mono">587 (STARTTLS)</p>
+                ) : (
+                  <>
+                    <Select value={portPreset} onValueChange={handlePortPresetChange}>
+                      <SelectTrigger id="wiz-relay-port">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="587">587 — Submission (STARTTLS)</SelectItem>
+                        <SelectItem value="465">465 — SMTPS (Implicit TLS)</SelectItem>
+                        <SelectItem value="25">25 — SMTP (No encryption)</SelectItem>
+                        <SelectItem value="custom">Custom port...</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {portPreset === 'custom' && (
+                      <Input type="number" value={customPort} onChange={(e) => setCustomPort(e.target.value)}
+                        placeholder="Port number" className="mt-2" />
+                    )}
+                  </>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="wiz-relay-username">Username</Label>
@@ -450,6 +476,10 @@ function StepConfigureRelay({
               </div>
               {method === 'gmail' ? (
                 <p className="text-xs text-slate-400 dark:text-slate-500">STARTTLS is always enabled for Gmail.</p>
+              ) : effectivePort === '25' ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">Port 25 — no encryption.</p>
+              ) : effectivePort === '465' ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">Port 465 — implicit TLS (no STARTTLS needed).</p>
               ) : (
                 <div className="flex items-center gap-3">
                   <Switch

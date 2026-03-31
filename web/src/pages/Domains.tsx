@@ -51,10 +51,13 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
   const [showPassword, setShowPassword] = useState(false);
   const [method, setMethod] = useState<RelayMethod>('direct');
   const [host, setHost] = useState('');
-  const [port, setPort] = useState('25');
+  const [portPreset, setPortPreset] = useState('587');
+  const [customPort, setCustomPort] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [starttls, setStarttls] = useState(true);
+
+  const effectivePort = portPreset === 'custom' ? customPort : portPreset;
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +68,14 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
           const m = (data.method as RelayMethod) || 'direct';
           setMethod(m);
           setHost(data.host ?? METHOD_DEFAULTS[m].host);
-          setPort(String(data.port || METHOD_DEFAULTS[m].port));
+          const p = String(data.port || METHOD_DEFAULTS[m].port);
+          if (['25', '465', '587'].includes(p)) {
+            setPortPreset(p);
+            setCustomPort('');
+          } else {
+            setPortPreset('custom');
+            setCustomPort(p);
+          }
           setUsername(data.username ?? '');
           setPassword(''); // never pre-fill password
           setStarttls(data.starttls);
@@ -86,12 +96,19 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
     setMethod(m);
     if (m === 'gmail') {
       setHost('smtp.gmail.com');
-      setPort('587');
+      setPortPreset('587');
       setStarttls(true);
     } else if (m === 'direct') {
       setHost('');
-      setPort('25');
+      setPortPreset('25');
     }
+  }
+
+  function handlePortPresetChange(val: string) {
+    setPortPreset(val);
+    if (val === '587') setStarttls(true);
+    else if (val === '25') setStarttls(false);
+    else if (val === '465') setStarttls(false); // implicit TLS, not STARTTLS
   }
 
   async function handleSave() {
@@ -100,7 +117,7 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
       await api.put(`/domains/${domain.id}/relay`, {
         method,
         host: host || undefined,
-        port: parseInt(port, 10) || 25,
+        port: parseInt(effectivePort, 10) || 587,
         username: username || undefined,
         password: password || undefined,
         starttls: method === 'gmail' ? true : starttls,
@@ -166,7 +183,27 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="relay-port">Port</Label>
-                <Input id="relay-port" type="number" value={port} onChange={(e) => setPort(e.target.value)} />
+                {method === 'gmail' ? (
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-mono">587 (STARTTLS)</p>
+                ) : (
+                  <>
+                    <Select value={portPreset} onValueChange={handlePortPresetChange}>
+                      <SelectTrigger id="relay-port">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="587">587 — Submission (STARTTLS)</SelectItem>
+                        <SelectItem value="465">465 — SMTPS (Implicit TLS)</SelectItem>
+                        <SelectItem value="25">25 — SMTP (No encryption)</SelectItem>
+                        <SelectItem value="custom">Custom port...</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {portPreset === 'custom' && (
+                      <Input type="number" value={customPort} onChange={(e) => setCustomPort(e.target.value)}
+                        placeholder="Port number" className="mt-2" />
+                    )}
+                  </>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="relay-username">Username</Label>
@@ -189,6 +226,10 @@ function RelayConfigTab({ domain }: { domain: Domain }) {
               </div>
               {method === 'gmail' ? (
                 <p className="text-xs text-slate-400 dark:text-slate-500">STARTTLS is always enabled for Gmail.</p>
+              ) : effectivePort === '25' ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">Port 25 — no encryption.</p>
+              ) : effectivePort === '465' ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500">Port 465 — implicit TLS (no STARTTLS needed).</p>
               ) : (
                 <div className="flex items-center gap-3">
                   <Switch id="relay-starttls" checked={starttls} onCheckedChange={setStarttls} />
