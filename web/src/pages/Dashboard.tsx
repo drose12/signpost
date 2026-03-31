@@ -1,14 +1,19 @@
 // web/src/pages/Dashboard.tsx
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { api } from '@/api';
-import type { StatusResponse, MailLogEntry } from '@/types';
+import type { StatusResponse, MailLogEntry, Domain, TestSendResponse } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ServerIcon, GlobeIcon, ShieldIcon, InfoIcon, NetworkIcon } from 'lucide-react';
+import { ServerIcon, GlobeIcon, ShieldIcon, InfoIcon, NetworkIcon, Send } from 'lucide-react';
 
 function formatTime(ts: string): string {
   try {
@@ -25,6 +30,99 @@ function statusVariant(status: string): 'default' | 'destructive' | 'secondary' 
     case 'deferred': return 'secondary';
     default: return 'outline';
   }
+}
+
+function TestEmailCard() {
+  const [domains, setDomains] = useState<Domain[]>([]);
+  const [selectedDomain, setSelectedDomain] = useState('');
+  const [to, setTo] = useState('');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<TestSendResponse | null>(null);
+
+  useEffect(() => {
+    api.get<Domain[]>('/domains').then((data) => {
+      setDomains(data);
+      if (data.length > 0) setSelectedDomain(data[0].name);
+    }).catch(() => {});
+  }, []);
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    if (!to.trim() || !selectedDomain) return;
+    setSending(true);
+    setResult(null);
+    try {
+      const resp = await api.post<TestSendResponse>('/test/send', {
+        from: `test@${selectedDomain}`,
+        to: to.trim(),
+        subject: 'SignPost Test Email',
+        body: `This is a test email sent from SignPost for domain ${selectedDomain}.`,
+      });
+      setResult(resp);
+      if (resp.status === 'sent' || resp.status === 'queued') {
+        toast.success('Test email sent');
+      } else {
+        toast.error(resp.error || 'Test email failed');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to send';
+      setResult({ status: 'failed', error: msg });
+      toast.error(msg);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Card className="dark:bg-slate-800">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">Send Test Email</CardTitle>
+        <Send className="h-4 w-4 text-slate-400" />
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSend} className="flex items-end gap-3 flex-wrap">
+          <div className="space-y-1.5 min-w-[140px]">
+            <Label htmlFor="test-from-domain" className="text-xs">From domain</Label>
+            <Select value={selectedDomain} onValueChange={setSelectedDomain}>
+              <SelectTrigger id="test-from-domain" className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {domains.map((d) => (
+                  <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5 flex-1 min-w-[200px]">
+            <Label htmlFor="test-to" className="text-xs">To</Label>
+            <Input
+              id="test-to"
+              type="email"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              placeholder="recipient@example.com"
+              className="h-9"
+              required
+            />
+          </div>
+          <Button type="submit" size="sm" disabled={sending || !to.trim() || !selectedDomain}>
+            <Send className="h-3.5 w-3.5 mr-1.5" />
+            {sending ? 'Sending...' : 'Send'}
+          </Button>
+        </form>
+        {result && (
+          <div className="mt-3">
+            {result.status === 'sent' || result.status === 'queued' ? (
+              <p className="text-sm text-green-600 dark:text-green-400">Sent as test@{selectedDomain}</p>
+            ) : (
+              <p className="text-sm text-red-500">{result.error}</p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export function Dashboard() {
@@ -149,6 +247,9 @@ export function Dashboard() {
           </AlertDescription>
         </Alert>
       )}
+
+      {/* Send Test Email */}
+      {status && status.domain_count > 0 && <TestEmailCard />}
 
       {/* Recent activity */}
       <div className="space-y-2">
