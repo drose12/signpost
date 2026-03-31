@@ -94,11 +94,11 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 - [x] 2.11: Frontend tests — 5 Vitest tests (API client + wizard rendering)
 - [x] 2.12: Final integration verification (Docker build, SPA served, all APIs working)
 
-### Phase 3 — TLS & Security (not started)
+### Phase 3 — TLS & Security (in progress)
 - [ ] 3.1: Let's Encrypt ACME DNS-01 via Cloudflare
-- [ ] 3.2: TLS configuration page
+- [x] 3.2: TLS — self-signed cert generation at startup, TLS management card on Dashboard
 - [ ] 3.3: Security audit page
-- [ ] 3.4: SMTP user management page
+- [x] 3.4: SMTP user management — CRUD UI, bcrypt hashing (bcrypt: prefix for Maddy), port 587 control
 - [ ] 3.5: Security tests
 - [x] AES-256-GCM credential encryption (internal/crypto package, 10 tests)
 
@@ -111,17 +111,24 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Known Issues / TODOs for Next Session
 
-1. ~~**Relay password encryption**~~ — **Done.** AES-256-GCM with HKDF-SHA256 key derivation from SIGNPOST_SECRET_KEY. Old plaintext passwords (placeholder-nonce) handled gracefully.
-2. **Test send** — `handleTestSend` now sends real email via local SMTP (Maddy port 25).
-3. **Integration tests** — Phase 1.7 not started. Need Testcontainers to spin up the full container and test SMTP flow end-to-end.
-4. **DNS records** — Need to configure DKIM/SPF/DMARC records on Cloudflare for drcs.ca before real mail delivery works. The API generates the required records (`GET /api/v1/domains/{id}/dns`).
-5. **Relay config** — For prod, configure Gmail relay (app password) so mail goes through Gmail instead of direct delivery. Direct delivery from a residential IP will be rejected by most providers.
-6. **Config reload race** — Rapid API calls (e.g., domain create + DKIM generate) can cause the second SIGHUP to fire while Maddy is restarting. The s6 supervisor handles this gracefully (just restarts again), but could debounce the regenerateConfig calls.
+1. ~~**Relay password encryption**~~ — **Done.** AES-256-GCM with HKDF-SHA256.
+2. ~~**DNS records**~~ — **Done.** DKIM/SPF/DMARC configured on Cloudflare for drcs.ca. DNS check endpoint verifies live.
+3. ~~**Relay config**~~ — **Done.** Gmail (PLAIN auth via Maddy) and ISP (LOGIN auth via Go) both working.
+4. ~~**SMTP users**~~ — **Done.** Port 587 submission with bcrypt auth working. TrueNAS verified.
+5. **Integration tests** — Phase 1.7 not started. Need Testcontainers.
+6. **Config reload race** — Rapid API calls can cause double SIGHUP. s6 handles it but could debounce.
+7. **Let's Encrypt ACME** — Phase 3.1, not started. Self-signed certs work for now.
+8. **Security audit page** — Phase 3.3, not started.
+9. **Mail log rotation** — Backlog. No way to delete/rotate logs yet.
+
+## Current Version
+
+v0.2.0 — tagged 2026-03-31
 
 ## How to Pick Up
 
 1. Read this file
-2. Run `CGO_ENABLED=1 go test -race ./internal/...` to verify Go tests (52 tests across 4 packages)
+2. Run `CGO_ENABLED=1 go test -race ./internal/...` to verify Go tests (100+ tests across 6 packages)
 3. Run `cd web && npx vitest run` to verify frontend tests (5 tests)
 4. `docker compose -f docker-compose.dev.yml up --build -d` to start the container
 5. Test: `curl http://localhost:8080/api/v1/healthz` and browse to `http://localhost:8080/`
