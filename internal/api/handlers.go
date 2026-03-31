@@ -8,6 +8,7 @@ import (
 	"net/smtp"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -518,17 +519,30 @@ func (s *Server) handleRelayTest(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			c2.Quit()
+			// Persist detected auth method
+			if err := s.db.UpdateRelayAuthMethod(id, "login"); err != nil {
+				// Log but don't fail the test — connectivity succeeded
+				fmt.Printf("WARNING: failed to persist auth_method=login for domain %d: %v\n", id, err)
+			}
+			go s.regenerateConfig()
 			writeJSON(w, http.StatusOK, map[string]string{
-				"status":  "ok",
-				"message": fmt.Sprintf("Connected and authenticated to %s (LOGIN auth)", addr),
+				"status":      "ok",
+				"message":     fmt.Sprintf("Connected and authenticated to %s (LOGIN auth)", addr),
+				"auth_method": "login",
 			})
 			return
 		}
 
 		c.Quit()
+		// Persist detected auth method
+		if err := s.db.UpdateRelayAuthMethod(id, "plain"); err != nil {
+			fmt.Printf("WARNING: failed to persist auth_method=plain for domain %d: %v\n", id, err)
+		}
+		go s.regenerateConfig()
 		writeJSON(w, http.StatusOK, map[string]string{
-			"status":  "ok",
-			"message": fmt.Sprintf("Connected and authenticated to %s", addr),
+			"status":      "ok",
+			"message":     fmt.Sprintf("Connected and authenticated to %s (PLAIN auth)", addr),
+			"auth_method": "plain",
 		})
 		return
 	}
@@ -539,7 +553,8 @@ func (s *Server) handleRelayTest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleTestSend sends a test email via local SMTP (Maddy).
+// handleTestSend sends a test email. For LOGIN auth relays, it DKIM-signs in Go
+// and relays directly. For PLAIN auth relays (e.g., Gmail), it sends through Maddy.
 func (s *Server) handleTestSend(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		From    string `json:"from"`
@@ -566,7 +581,7 @@ func (s *Server) handleTestSend(w http.ResponseWriter, r *http.Request) {
 		req.Body = "This is a test email from SignPost.\nIf you received this, your mail relay is working correctly."
 	}
 
-	// Send via local SMTP (Maddy on port 25)
+	// Build the raw message
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s@signpost>\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
 		req.From, req.To, req.Subject,
 		time.Now().Format(time.RFC1123Z),
@@ -574,13 +589,36 @@ func (s *Server) handleTestSend(w http.ResponseWriter, r *http.Request) {
 		req.Body,
 	)
 
+	// Extract the sender domain to look up relay config
+	fromParts := strings.SplitN(req.From, "@", 2)
+	var domain *db.Domain
+	var relay *db.RelayConfig
+	if len(fromParts) == 2 {
+		domain, _ = s.db.GetDomainByName(fromParts[1])
+		if domain != nil {
+			relay, _ = s.db.GetRelayConfig(domain.ID)
+		}
+	}
+
+	// Route based on auth_method
+	if relay != nil && relay.AuthMethod == "login" && relay.Host != nil && *relay.Host != "" {
+		// LOGIN relay: DKIM sign in Go, then relay directly
+		s.sendViaLoginRelay(w, req.From, req.To, req.Subject, []byte(msg), domain, relay)
+		return
+	}
+
+	// Default: send via local SMTP (Maddy handles DKIM + relay)
 	smtpPort := envOrDefault("SIGNPOST_SMTP_PORT", "25")
 	addr := net.JoinHostPort("127.0.0.1", smtpPort)
 
 	err := smtp.SendMail(addr, nil, req.From, []string{req.To}, []byte(msg))
 	if err != nil {
 		errStr := err.Error()
-		s.db.LogMail(req.From, req.To, nil, req.Subject, "failed", nil, &errStr, false)
+		var domainID *int64
+		if domain != nil {
+			domainID = &domain.ID
+		}
+		s.db.LogMail(req.From, req.To, domainID, req.Subject, "failed", nil, &errStr, false)
 		writeJSON(w, http.StatusOK, map[string]string{
 			"status": "failed",
 			"error":  errStr,
@@ -588,9 +626,153 @@ func (s *Server) handleTestSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.db.LogMail(req.From, req.To, nil, req.Subject, "sent", nil, nil, true)
+	var domainID *int64
+	if domain != nil {
+		domainID = &domain.ID
+	}
+	s.db.LogMail(req.From, req.To, domainID, req.Subject, "sent", nil, nil, true)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "sent",
-		"message": fmt.Sprintf("Test email sent from %s to %s", req.From, req.To),
+		"message": fmt.Sprintf("Test email sent from %s to %s via Maddy", req.From, req.To),
+	})
+}
+
+// sendViaLoginRelay DKIM-signs a message in Go and relays directly using LOGIN auth.
+func (s *Server) sendViaLoginRelay(w http.ResponseWriter, from, to, subject string, rawMsg []byte, domain *db.Domain, relay *db.RelayConfig) {
+	relayHost := *relay.Host
+	relayAddr := net.JoinHostPort(relayHost, strconv.Itoa(relay.Port))
+
+	// Step 1: DKIM sign if the domain has a key
+	signedMsg := rawMsg
+	dkimSigned := false
+	if domain.DKIMKeyPath != nil && *domain.DKIMKeyPath != "" {
+		var err error
+		signedMsg, err = dkim.SignMessage(rawMsg, domain.Name, domain.DKIMSelector, *domain.DKIMKeyPath)
+		if err != nil {
+			errStr := fmt.Sprintf("DKIM signing failed: %v", err)
+			s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+			writeJSON(w, http.StatusOK, map[string]string{
+				"status": "failed",
+				"error":  errStr,
+			})
+			return
+		}
+		dkimSigned = true
+	}
+
+	// Step 2: Connect to relay
+	c, err := smtp.Dial(relayAddr)
+	if err != nil {
+		errStr := fmt.Sprintf("Failed to connect to %s: %v", relayAddr, err)
+		s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status": "failed",
+			"error":  errStr,
+		})
+		return
+	}
+	defer c.Close()
+
+	if err := c.Hello("localhost"); err != nil {
+		errStr := fmt.Sprintf("EHLO failed: %v", err)
+		s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status": "failed",
+			"error":  errStr,
+		})
+		return
+	}
+
+	// Step 3: STARTTLS if configured
+	if relay.StartTLS {
+		if ok, _ := c.Extension("STARTTLS"); ok {
+			tlsConfig := &tls.Config{ServerName: relayHost}
+			if err := c.StartTLS(tlsConfig); err != nil {
+				errStr := fmt.Sprintf("STARTTLS failed: %v", err)
+				s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+				writeJSON(w, http.StatusOK, map[string]string{
+					"status": "failed",
+					"error":  errStr,
+				})
+				return
+			}
+		}
+	}
+
+	// Step 4: AUTH LOGIN
+	if relay.Username != nil && *relay.Username != "" && relay.PasswordEnc != nil && *relay.PasswordEnc != "" {
+		// TODO: Replace with real decryption when AES-256-GCM is implemented (Phase 3)
+		password := *relay.PasswordEnc
+		auth := &loginAuth{username: *relay.Username, password: password}
+		if err := c.Auth(auth); err != nil {
+			errStr := fmt.Sprintf("LOGIN auth failed: %v", err)
+			s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+			writeJSON(w, http.StatusOK, map[string]string{
+				"status": "failed",
+				"error":  errStr,
+			})
+			return
+		}
+	}
+
+	// Step 5: MAIL FROM, RCPT TO, DATA
+	if err := c.Mail(from); err != nil {
+		errStr := fmt.Sprintf("MAIL FROM failed: %v", err)
+		s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status": "failed",
+			"error":  errStr,
+		})
+		return
+	}
+
+	if err := c.Rcpt(to); err != nil {
+		errStr := fmt.Sprintf("RCPT TO failed: %v", err)
+		s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status": "failed",
+			"error":  errStr,
+		})
+		return
+	}
+
+	wc, err := c.Data()
+	if err != nil {
+		errStr := fmt.Sprintf("DATA failed: %v", err)
+		s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status": "failed",
+			"error":  errStr,
+		})
+		return
+	}
+
+	if _, err := wc.Write(signedMsg); err != nil {
+		wc.Close()
+		errStr := fmt.Sprintf("Failed to write message data: %v", err)
+		s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status": "failed",
+			"error":  errStr,
+		})
+		return
+	}
+
+	if err := wc.Close(); err != nil {
+		errStr := fmt.Sprintf("Failed to complete DATA: %v", err)
+		s.db.LogMail(from, to, &domain.ID, subject, "failed", &relayHost, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{
+			"status": "failed",
+			"error":  errStr,
+		})
+		return
+	}
+
+	c.Quit()
+
+	s.db.LogMail(from, to, &domain.ID, subject, "sent", &relayHost, nil, dkimSigned)
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "sent",
+		"message": fmt.Sprintf("Test email sent from %s to %s via %s (LOGIN auth, Go DKIM)", from, to, relayAddr),
 	})
 }
