@@ -64,19 +64,21 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	httpPort := envOrDefault("SIGNPOST_HTTP_PORT", "8080")
 	submissionPort := envOrDefault("SIGNPOST_SUBMISSION_PORT", "587")
 
-	// Check if msmtpd is listening on port 2500
-	msmtpdStatus := "stopped"
+	// Check if msmtpd is needed and running
 	msmtpdConn, msmtpdErr := net.DialTimeout("tcp", "127.0.0.1:2500", 500*time.Millisecond)
-	if msmtpdErr == nil {
+	msmtpdRunning := msmtpdErr == nil
+	if msmtpdRunning {
 		msmtpdConn.Close()
-		msmtpdStatus = "running"
 	}
 
 	listeners := []map[string]string{
 		{"name": "SMTP", "bind": "0.0.0.0:" + smtpPort, "status": maddyStatus},
 		{"name": "Submission", "bind": "0.0.0.0:" + submissionPort, "status": maddyStatus},
-		{"name": "msmtpd (LOGIN relay)", "bind": "127.0.0.1:2500", "status": msmtpdStatus},
 		{"name": "HTTP API", "bind": "0.0.0.0:" + httpPort, "status": "running"},
+	}
+	// Only show msmtpd if it's actually running (LOGIN relay active)
+	if msmtpdRunning {
+		listeners = append(listeners, map[string]string{"name": "msmtpd (LOGIN relay)", "bind": "127.0.0.1:2500", "status": "running"})
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
