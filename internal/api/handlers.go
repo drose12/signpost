@@ -1104,3 +1104,217 @@ func (s *Server) handleGenerateSelfSigned(w http.ResponseWriter, r *http.Request
 		"key_path":  keyPath,
 	})
 }
+
+// ---------------------------------------------------------------------------
+// Domain Config Export / Import
+// ---------------------------------------------------------------------------
+
+// domainExportPayload is the JSON structure for a full domain config export.
+type domainExportPayload struct {
+	SignpostVersion string              `json:"signpost_version"`
+	ExportedAt      string              `json:"exported_at"`
+	Domain          domainExportDomain  `json:"domain"`
+	DKIMKey         string              `json:"dkim_key,omitempty"`
+	RelayConfigs    []relayExportConfig `json:"relay_configs"`
+}
+
+type domainExportDomain struct {
+	Name         string `json:"name"`
+	DKIMSelector string `json:"dkim_selector"`
+}
+
+type relayExportConfig struct {
+	Method     string  `json:"method"`
+	Host       *string `json:"host,omitempty"`
+	Port       int     `json:"port"`
+	Username   *string `json:"username,omitempty"`
+	Password   string  `json:"password,omitempty"`
+	StartTLS   bool    `json:"starttls"`
+	AuthMethod string  `json:"auth_method,omitempty"`
+	Active     bool    `json:"active"`
+}
+
+// handleExportDomainConfig exports a domain's entire configuration as a JSON file download.
+func (s *Server) handleExportDomainConfig(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid domain ID")
+		return
+	}
+
+	domain, err := s.db.GetDomain(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if domain == nil {
+		writeError(w, http.StatusNotFound, "domain not found")
+		return
+	}
+
+	// Read DKIM private key if it exists
+	var dkimKeyPEM string
+	if domain.DKIMKeyPath != nil && *domain.DKIMKeyPath != "" {
+		keyBytes, err := os.ReadFile(*domain.DKIMKeyPath)
+		if err == nil {
+			dkimKeyPEM = string(keyBytes)
+		}
+	}
+
+	// Get all relay configs for this domain
+	relayConfigs, err := s.db.ListRelayConfigs(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	exportRelays := make([]relayExportConfig, 0, len(relayConfigs))
+	for _, rc := range relayConfigs {
+		var password string
+		if rc.PasswordEnc != nil && rc.PasswordNonce != nil {
+			pw, err := s.decryptRelayPassword(*rc.PasswordEnc, *rc.PasswordNonce)
+			if err == nil {
+				password = pw
+			}
+		}
+		exportRelays = append(exportRelays, relayExportConfig{
+			Method:     rc.Method,
+			Host:       rc.Host,
+			Port:       rc.Port,
+			Username:   rc.Username,
+			Password:   password,
+			StartTLS:   rc.StartTLS,
+			AuthMethod: rc.AuthMethod,
+			Active:     rc.Active,
+		})
+	}
+
+	payload := domainExportPayload{
+		SignpostVersion: s.version,
+		ExportedAt:      time.Now().UTC().Format(time.RFC3339),
+		Domain: domainExportDomain{
+			Name:         domain.Name,
+			DKIMSelector: domain.DKIMSelector,
+		},
+		DKIMKey:      dkimKeyPEM,
+		RelayConfigs: exportRelays,
+	}
+
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode export data")
+		return
+	}
+
+	filename := domain.Name + "-signpost-config.json"
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Write(data)
+}
+
+// handleImportDomainConfig imports a domain config from a JSON file.
+// Creates or updates the domain, writes DKIM key, creates/upserts relay configs.
+func (s *Server) handleImportDomainConfig(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
+
+	var payload domainExportPayload
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
+		return
+	}
+
+	if payload.Domain.Name == "" {
+		writeError(w, http.StatusBadRequest, "domain name is required")
+		return
+	}
+
+	selector := payload.Domain.DKIMSelector
+	if selector == "" {
+		selector = "signpost"
+	}
+
+	// Create or update domain
+	domain, err := s.db.GetDomainByName(payload.Domain.Name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if domain == nil {
+		domain, err = s.db.CreateDomain(payload.Domain.Name, selector)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create domain: %v", err))
+			return
+		}
+	}
+
+	// Write DKIM key if provided
+	if payload.DKIMKey != "" {
+		pemData := []byte(payload.DKIMKey)
+		publicKeyDNS, err := dkim.ValidateAndExtractPublicKey(pemData)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid DKIM key: %v", err))
+			return
+		}
+
+		if err := os.MkdirAll(s.keysDir, 0750); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create keys directory: %v", err))
+			return
+		}
+
+		keyPath := s.keysDir + "/" + domain.Name + ".key"
+		if err := os.WriteFile(keyPath, pemData, 0600); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to write DKIM key: %v", err))
+			return
+		}
+
+		if err := s.db.UpdateDomainDKIM(domain.ID, keyPath, publicKeyDNS); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	// Upsert relay configs
+	for _, rc := range payload.RelayConfigs {
+		var passEnc, passNonce *string
+		if rc.Password != "" {
+			if s.encKey == nil {
+				writeError(w, http.StatusInternalServerError, "encryption key not configured (set SIGNPOST_SECRET_KEY)")
+				return
+			}
+			enc, nonce, err := crypto.Encrypt(s.encKey, rc.Password)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to encrypt relay password")
+				return
+			}
+			passEnc = &enc
+			passNonce = &nonce
+		}
+
+		if err := s.db.UpsertRelayConfig(
+			domain.ID, rc.Method, rc.Host, rc.Port,
+			rc.Username, passEnc, passNonce,
+			rc.StartTLS, rc.Active,
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to upsert relay config: %v", err))
+			return
+		}
+	}
+
+	// Checkpoint and regenerate config
+	s.db.Checkpoint()
+	go s.regenerateConfig()
+
+	// Re-read domain to get updated fields
+	domain, err = s.db.GetDomain(domain.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, domain)
+}

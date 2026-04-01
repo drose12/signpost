@@ -975,6 +975,41 @@ export function Domains() {
 
   const [deleteTarget, setDeleteTarget] = useState<Domain | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  async function handleExportDomain(domain: Domain) {
+    try {
+      const blob = await api.blob(`/domains/${domain.id}/export`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${domain.name}-signpost-config.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${domain.name} config`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    }
+  }
+
+  async function handleImportDomainConfig(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const domain = await api.post<Domain>('/domains/import', payload);
+      toast.success(`Imported domain "${domain.name}"`);
+      fetchDomains();
+      setSelectedId(domain.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      if (importFileRef.current) importFileRef.current.value = '';
+    }
+  }
 
   function handleDeleted() {
     setDomains((prev) => prev.filter((d) => d.id !== selectedId));
@@ -1006,10 +1041,23 @@ export function Domains() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">Domains</h1>
-        <Button onClick={() => setAddOpen(true)}>
-          <PlusIcon className="h-4 w-4 mr-2" />
-          Add Domain
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => importFileRef.current?.click()}>
+            <UploadIcon className="h-4 w-4 mr-2" />
+            Import
+          </Button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleImportDomainConfig}
+          />
+          <Button onClick={() => setAddOpen(true)}>
+            <PlusIcon className="h-4 w-4 mr-2" />
+            Add Domain
+          </Button>
+        </div>
       </div>
 
       {/* Domain list */}
@@ -1046,17 +1094,32 @@ export function Domains() {
                       <span className="text-xs text-amber-600 dark:text-amber-400">DNS issues</span>
                     )}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteTarget(domain);
-                    }}
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950"
+                      title="Export config"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleExportDomain(domain);
+                      }}
+                    >
+                      <DownloadIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                      title="Delete domain"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget(domain);
+                      }}
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             );

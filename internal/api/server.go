@@ -88,6 +88,8 @@ func (s *Server) buildRouter() chi.Router {
 		r.Post("/api/v1/domains/{id}/dkim/import", s.handleImportDKIM)
 		r.Get("/api/v1/domains/{id}/dns", s.handleGetDNSRecords)
 		r.Get("/api/v1/domains/{id}/dns/check", s.handleDNSCheck)
+		r.Get("/api/v1/domains/{id}/export", s.handleExportDomainConfig)
+		r.Post("/api/v1/domains/import", s.handleImportDomainConfig)
 
 		// Relay configuration
 		r.Get("/api/v1/domains/{id}/relay", s.handleGetRelay)

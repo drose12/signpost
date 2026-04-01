@@ -52,9 +52,27 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+async function fetchBlob(path: string): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  if (credentials) {
+    headers['Authorization'] = 'Basic ' + btoa(`${credentials.username}:${credentials.password}`);
+  }
+  const res = await fetch(`/api/v1${path}`, { headers });
+  if (res.status === 401) {
+    clearCredentials();
+    throw new ApiError(401, 'Unauthorized');
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new ApiError(res.status, data.error || 'Unknown error');
+  }
+  return res.blob();
+}
+
 export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
   del: <T>(path: string) => request<T>('DELETE', path),
+  blob: (path: string) => fetchBlob(path),
 };
