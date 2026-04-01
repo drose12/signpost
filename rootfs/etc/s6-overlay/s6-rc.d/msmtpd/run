@@ -5,4 +5,4 @@ while [ ! -f /data/signpost/msmtp.conf ]; do
   sleep 2
 done
 echo "msmtpd: starting on 127.0.0.1:2500"
-exec msmtpd --interface=127.0.0.1 --port=2500 --log=/tmp/msmtp.log --command="msmtp -C /data/signpost/msmtp.conf --read-envelope-from -t"
+exec msmtpd --interface=127.0.0.1 --port=2500 --log=/tmp/msmtp.log --command="msmtp -C /data/signpost/msmtp.conf --read-envelope-from --"
