@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { MailIcon, AlertCircleIcon } from 'lucide-react';
+import { MailIcon, AlertCircleIcon, Trash2 } from 'lucide-react';
 
 const PAGE_SIZE = 50;
 
@@ -111,6 +111,27 @@ export function MailLog() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">Mail Log</h1>
+        <div className="flex items-center gap-2">
+          {entries.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+              onClick={async () => {
+                if (!confirm('Clear all mail log entries?')) return;
+                try {
+                  await api.del('/logs');
+                  toast.success('Mail log cleared');
+                  setEntries([]);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Failed to clear logs');
+                }
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Clear
+            </Button>
+          )}
         <Select value={filter} onValueChange={handleFilterChange}>
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="Filter status" />
@@ -122,6 +143,7 @@ export function MailLog() {
             <SelectItem value="deferred">Deferred</SelectItem>
           </SelectContent>
         </Select>
+        </div>
       </div>
 
       {loading ? (

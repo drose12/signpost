@@ -124,6 +124,7 @@ func (s *Server) buildRouter() chi.Router {
 
 		// Mail logs
 		r.Get("/api/v1/logs", s.handleGetLogs)
+		r.Delete("/api/v1/logs", s.handleClearLogs)
 
 		// Test
 		r.Post("/api/v1/test/send", s.handleTestSend)

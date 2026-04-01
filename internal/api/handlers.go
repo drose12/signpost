@@ -575,6 +575,15 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, entries)
 }
 
+// handleClearLogs deletes all mail log entries.
+func (s *Server) handleClearLogs(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.db.Exec(`DELETE FROM mail_log`); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
+}
+
 // loginAuth implements smtp.Auth for the LOGIN mechanism.
 // Many ISP mail servers only support LOGIN, not PLAIN.
 type loginAuth struct {
