@@ -24,6 +24,7 @@ export interface RelayConfig {
   password?: string;
   starttls: boolean;
   auth_method?: string; // plain or login
+  active: boolean;
   created_at: string;
   updated_at: string;
 }

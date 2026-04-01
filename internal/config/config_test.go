@@ -121,7 +121,7 @@ func TestGenerateWithRelay(t *testing.T) {
 	user := "user@drcs.ca"
 	passEnc := "encpass"
 	passNonce := "nonce"
-	database.UpsertRelayConfig(domain.ID, "gmail", &host, 587, &user, &passEnc, &passNonce, true)
+	database.UpsertRelayConfig(domain.ID, "gmail", &host, 587, &user, &passEnc, &passNonce, true, true)
 
 	content, err := gen.Generate(database, noopDecrypt)
 	if err != nil {
@@ -140,7 +140,7 @@ func TestGenerateDirectDelivery(t *testing.T) {
 	database, gen := testSetup(t)
 
 	domain, _ := database.CreateDomain("drcs.ca", "signpost")
-	database.UpsertRelayConfig(domain.ID, "direct", nil, 25, nil, nil, nil, false)
+	database.UpsertRelayConfig(domain.ID, "direct", nil, 25, nil, nil, nil, false, true)
 
 	content, err := gen.Generate(database, noopDecrypt)
 	if err != nil {
@@ -316,7 +316,7 @@ func TestRealTemplateWithRelay(t *testing.T) {
 	user := "user@drcs.ca"
 	passEnc := "encpass"
 	passNonce := "nonce"
-	database.UpsertRelayConfig(domain.ID, "gmail", &host, 587, &user, &passEnc, &passNonce, true)
+	database.UpsertRelayConfig(domain.ID, "gmail", &host, 587, &user, &passEnc, &passNonce, true, true)
 
 	content, err := gen.Generate(database, noopDecrypt)
 	if err != nil {
@@ -359,7 +359,7 @@ func TestRealTemplateMultipleDomains(t *testing.T) {
 	user := "user@drcs.ca"
 	passEnc := "encpass"
 	passNonce := "nonce"
-	database.UpsertRelayConfig(d1.ID, "gmail", &host, 587, &user, &passEnc, &passNonce, true)
+	database.UpsertRelayConfig(d1.ID, "gmail", &host, 587, &user, &passEnc, &passNonce, true, true)
 
 	content, err := gen.Generate(database, noopDecrypt)
 	if err != nil {

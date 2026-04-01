@@ -467,38 +467,47 @@ function RelayConfigCard({ domain, onDnsRefresh }: { domain: Domain; onDnsRefres
   const [editingMethod, setEditingMethod] = useState<RelayMethod | null>(null);
   const [publicIP, setPublicIP] = useState<string | null>(null);
 
-  // Load active relay config from API
+  // Parse a RelayConfig from the API into form values
+  function parseRelayConfig(rc: RelayConfig): MethodFormValues {
+    const m = (rc.method as RelayMethod) || 'direct';
+    const p = String(rc.port || METHOD_DEFAULTS[m].portPreset);
+    let portPreset: string;
+    let customPort = '';
+    if (['25', '465', '587'].includes(p)) {
+      portPreset = p;
+    } else {
+      portPreset = 'custom';
+      customPort = p;
+    }
+    return {
+      host: rc.host ?? METHOD_DEFAULTS[m].host,
+      portPreset,
+      customPort,
+      username: rc.username ?? '',
+      password: rc.password ?? '',
+      starttls: rc.starttls,
+      authMethod: rc.auth_method,
+    };
+  }
+
+  // Load ALL relay configs from API
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    api.get<RelayConfig>(`/domains/${domain.id}/relay`)
-      .then((data) => {
+    api.get<RelayConfig[]>(`/domains/${domain.id}/relay/all`)
+      .then((configs) => {
         if (cancelled) return;
-        const m = (data.method as RelayMethod) || 'direct';
-        setActiveMethod(m);
-
-        // Parse API response into form values
-        const p = String(data.port || METHOD_DEFAULTS[m].portPreset);
-        let portPreset: string;
-        let customPort = '';
-        if (['25', '465', '587'].includes(p)) {
-          portPreset = p;
-        } else {
-          portPreset = 'custom';
-          customPort = p;
+        const cache: Record<string, MethodFormValues> = {};
+        let foundActive: RelayMethod | null = null;
+        for (const rc of configs) {
+          const m = rc.method as RelayMethod;
+          cache[m] = parseRelayConfig(rc);
+          if (rc.active) {
+            foundActive = m;
+          }
         }
-
-        setMethodCache({
-          [m]: {
-            host: data.host ?? METHOD_DEFAULTS[m].host,
-            portPreset,
-            customPort,
-            username: data.username ?? '',
-            password: data.password ?? '',
-            starttls: data.starttls,
-            authMethod: data.auth_method,
-          },
-        });
+        setMethodCache(cache);
+        setActiveMethod(foundActive ?? 'direct');
         setLoading(false);
       })
       .catch((err) => {
@@ -528,7 +537,8 @@ function RelayConfigCard({ domain, onDnsRefresh }: { domain: Domain; onDnsRefres
     return methodCache[m] ?? null;
   }
 
-  async function saveMethodToAPI(m: RelayMethod, vals: MethodFormValues) {
+  // Save a method config to the API. If activate=true, it becomes the active method.
+  async function saveMethodToAPI(m: RelayMethod, vals: MethodFormValues, activate: boolean) {
     setSaving(true);
     const effectivePort = vals.portPreset === 'custom' ? vals.customPort : vals.portPreset;
     try {
@@ -539,9 +549,14 @@ function RelayConfigCard({ domain, onDnsRefresh }: { domain: Domain; onDnsRefres
         username: vals.username || undefined,
         password: vals.password || undefined,
         starttls: m === 'gmail' ? true : vals.starttls,
+        active: activate,
       });
-      toast.success(`${METHOD_LABELS[m]} saved as active relay`);
-      setActiveMethod(m);
+      if (activate) {
+        toast.success(`${METHOD_LABELS[m]} saved and activated`);
+        setActiveMethod(m);
+      } else {
+        toast.success(`${METHOD_LABELS[m]} configuration saved`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save relay config');
     } finally {
@@ -550,18 +565,24 @@ function RelayConfigCard({ domain, onDnsRefresh }: { domain: Domain; onDnsRefres
   }
 
   function handleEditSave(m: RelayMethod, vals: MethodFormValues) {
-    // Update cache
+    // Update local cache
     setMethodCache((prev) => ({ ...prev, [m]: vals }));
-    // If this is the active method, save to DB
-    if (m === activeMethod) {
-      saveMethodToAPI(m, vals);
-    }
+    // Always persist to DB; activate only if this is the active method
+    const isCurrentlyActive = m === activeMethod;
+    saveMethodToAPI(m, vals, isCurrentlyActive);
   }
 
-  function handleActivate(m: RelayMethod) {
-    const vals = methodCache[m] ?? METHOD_DEFAULTS[m];
-    saveMethodToAPI(m, vals);
-    setMethodCache((prev) => ({ ...prev, [m]: vals }));
+  async function handleActivate(m: RelayMethod) {
+    setSaving(true);
+    try {
+      await api.put(`/domains/${domain.id}/relay/${m}/activate`);
+      toast.success(`${METHOD_LABELS[m]} activated`);
+      setActiveMethod(m);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to activate relay method');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleEdit(m: RelayMethod) {

@@ -91,7 +91,9 @@ func (s *Server) buildRouter() chi.Router {
 
 		// Relay configuration
 		r.Get("/api/v1/domains/{id}/relay", s.handleGetRelay)
+		r.Get("/api/v1/domains/{id}/relay/all", s.handleGetAllRelayConfigs)
 		r.Put("/api/v1/domains/{id}/relay", s.handleUpdateRelay)
+		r.Put("/api/v1/domains/{id}/relay/{method}/activate", s.handleActivateRelay)
 		r.Post("/api/v1/domains/{id}/relay/test", s.handleRelayTest)
 
 		// SMTP Users

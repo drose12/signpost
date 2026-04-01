@@ -361,7 +361,7 @@ func (s *Server) handleGetDNSRecords(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, records)
 }
 
-// handleGetRelay returns relay config for a domain.
+// handleGetRelay returns the ACTIVE relay config for a domain.
 func (s *Server) handleGetRelay(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
@@ -379,7 +379,33 @@ func (s *Server) handleGetRelay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build response with decrypted password
+	writeJSON(w, http.StatusOK, s.relayConfigResponse(rc))
+}
+
+// handleGetAllRelayConfigs returns ALL relay configs for a domain (all methods).
+func (s *Server) handleGetAllRelayConfigs(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid domain ID")
+		return
+	}
+
+	configs, err := s.db.ListRelayConfigs(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	result := make([]map[string]interface{}, 0, len(configs))
+	for i := range configs {
+		result = append(result, s.relayConfigResponse(&configs[i]))
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// relayConfigResponse builds a JSON-friendly response map for a relay config,
+// including decrypted password.
+func (s *Server) relayConfigResponse(rc *db.RelayConfig) map[string]interface{} {
 	resp := map[string]interface{}{
 		"id":          rc.ID,
 		"domain_id":   rc.DomainID,
@@ -389,6 +415,7 @@ func (s *Server) handleGetRelay(w http.ResponseWriter, r *http.Request) {
 		"username":    rc.Username,
 		"starttls":    rc.StartTLS,
 		"auth_method": rc.AuthMethod,
+		"active":      rc.Active,
 		"created_at":  rc.CreatedAt,
 		"updated_at":  rc.UpdatedAt,
 	}
@@ -398,10 +425,12 @@ func (s *Server) handleGetRelay(w http.ResponseWriter, r *http.Request) {
 			resp["password"] = pw
 		}
 	}
-	writeJSON(w, http.StatusOK, resp)
+	return resp
 }
 
 // handleUpdateRelay updates relay config for a domain.
+// Upserts by (domain_id, method). If active is true (or omitted for backwards compat),
+// all other methods for this domain are deactivated.
 func (s *Server) handleUpdateRelay(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
@@ -416,6 +445,7 @@ func (s *Server) handleUpdateRelay(w http.ResponseWriter, r *http.Request) {
 		Username *string `json:"username"`
 		Password *string `json:"password"`
 		StartTLS bool    `json:"starttls"`
+		Active   *bool   `json:"active"` // nil = true for backwards compat
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -426,6 +456,12 @@ func (s *Server) handleUpdateRelay(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Port == 0 {
 		req.Port = 587
+	}
+
+	// Default active to true for backwards compatibility
+	active := true
+	if req.Active != nil {
+		active = *req.Active
 	}
 
 	var passEnc, passNonce *string
@@ -443,13 +479,36 @@ func (s *Server) handleUpdateRelay(w http.ResponseWriter, r *http.Request) {
 		passNonce = &nonce
 	}
 
-	if err := s.db.UpsertRelayConfig(id, req.Method, req.Host, req.Port, req.Username, passEnc, passNonce, req.StartTLS); err != nil {
+	if err := s.db.UpsertRelayConfig(id, req.Method, req.Host, req.Port, req.Username, passEnc, passNonce, req.StartTLS, active); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	go s.regenerateConfig()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// handleActivateRelay activates a specific relay method for a domain.
+func (s *Server) handleActivateRelay(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid domain ID")
+		return
+	}
+
+	method := chi.URLParam(r, "method")
+	if method == "" {
+		writeError(w, http.StatusBadRequest, "method is required")
+		return
+	}
+
+	if err := s.db.ActivateRelayConfig(id, method); err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	go s.regenerateConfig()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "activated", "method": method})
 }
 
 // handleGetSettings returns all settings.

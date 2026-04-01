@@ -40,7 +40,7 @@ func TestOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SchemaVersion: %v", err)
 	}
-	if version != 5 {
+	if version != 6 {
 		t.Errorf("expected schema version 5, got %d", version)
 	}
 }
@@ -63,7 +63,7 @@ func TestOpenIdempotent(t *testing.T) {
 	defer db2.Close()
 
 	version, _ := db2.SchemaVersion()
-	if version != 5 {
+	if version != 6 {
 		t.Errorf("expected schema version 5 after reopening, got %d", version)
 	}
 }
@@ -221,12 +221,12 @@ func TestRelayConfig(t *testing.T) {
 		t.Error("expected no relay config initially")
 	}
 
-	// Create relay config
+	// Create relay config (active)
 	host := "smtp.gmail.com"
 	username := "user@drcs.ca"
 	passEnc := "encrypted-password"
 	passNonce := "nonce-value"
-	err = db.UpsertRelayConfig(domain.ID, "gmail", &host, 587, &username, &passEnc, &passNonce, true)
+	err = db.UpsertRelayConfig(domain.ID, "gmail", &host, 587, &username, &passEnc, &passNonce, true, true)
 	if err != nil {
 		t.Fatalf("UpsertRelayConfig: %v", err)
 	}
@@ -244,17 +244,120 @@ func TestRelayConfig(t *testing.T) {
 	if rc.Host == nil || *rc.Host != "smtp.gmail.com" {
 		t.Error("unexpected host")
 	}
+	if !rc.Active {
+		t.Error("expected active to be true")
+	}
 
-	// Update relay config
+	// Add a second relay config (ISP) as active — should deactivate gmail
 	newHost := "smtp.bellmts.net"
-	err = db.UpsertRelayConfig(domain.ID, "isp", &newHost, 25, nil, nil, nil, false)
+	err = db.UpsertRelayConfig(domain.ID, "isp", &newHost, 25, nil, nil, nil, false, true)
 	if err != nil {
-		t.Fatalf("UpsertRelayConfig update: %v", err)
+		t.Fatalf("UpsertRelayConfig ISP: %v", err)
+	}
+
+	// Active config should now be ISP
+	rc, _ = db.GetRelayConfig(domain.ID)
+	if rc.Method != "isp" {
+		t.Errorf("expected method 'isp' as active, got %q", rc.Method)
+	}
+
+	// Gmail config should still exist but inactive
+	gmailRC, err := db.GetRelayConfigByMethod(domain.ID, "gmail")
+	if err != nil {
+		t.Fatalf("GetRelayConfigByMethod: %v", err)
+	}
+	if gmailRC == nil {
+		t.Fatal("expected gmail config to still exist")
+	}
+	if gmailRC.Active {
+		t.Error("expected gmail to be inactive")
+	}
+	if gmailRC.Host == nil || *gmailRC.Host != "smtp.gmail.com" {
+		t.Error("gmail host should be preserved")
+	}
+
+	// List all configs
+	configs, err := db.ListRelayConfigs(domain.ID)
+	if err != nil {
+		t.Fatalf("ListRelayConfigs: %v", err)
+	}
+	if len(configs) != 2 {
+		t.Errorf("expected 2 configs, got %d", len(configs))
+	}
+}
+
+func TestRelayConfigActivate(t *testing.T) {
+	db := testDB(t)
+
+	domain, _ := db.CreateDomain("drcs.ca", "signpost")
+
+	// Create two configs
+	gmailHost := "smtp.gmail.com"
+	db.UpsertRelayConfig(domain.ID, "gmail", &gmailHost, 587, nil, nil, nil, true, true)
+	ispHost := "smtp.bellmts.net"
+	db.UpsertRelayConfig(domain.ID, "isp", &ispHost, 25, nil, nil, nil, false, false)
+
+	// Active should be gmail (ISP was saved but not activated since active=false and gmail was already deactivated by ISP upsert)
+	// Actually: gmail was set active=true, then ISP was set active=false. Since ISP active=false,
+	// the deactivate-all step in UpsertRelayConfig only runs when active=true.
+	// So gmail should still be active.
+	rc, _ := db.GetRelayConfig(domain.ID)
+	if rc == nil || rc.Method != "gmail" {
+		t.Fatalf("expected gmail to still be active, got %v", rc)
+	}
+
+	// Activate ISP
+	err := db.ActivateRelayConfig(domain.ID, "isp")
+	if err != nil {
+		t.Fatalf("ActivateRelayConfig: %v", err)
 	}
 
 	rc, _ = db.GetRelayConfig(domain.ID)
-	if rc.Method != "isp" {
-		t.Errorf("expected method 'isp' after update, got %q", rc.Method)
+	if rc == nil || rc.Method != "isp" {
+		t.Errorf("expected isp to be active after ActivateRelayConfig")
+	}
+
+	// Gmail should be inactive
+	gmail, _ := db.GetRelayConfigByMethod(domain.ID, "gmail")
+	if gmail == nil || gmail.Active {
+		t.Error("expected gmail to be inactive after activating isp")
+	}
+}
+
+func TestRelayConfigDeactivate(t *testing.T) {
+	db := testDB(t)
+
+	domain, _ := db.CreateDomain("drcs.ca", "signpost")
+
+	host := "smtp.gmail.com"
+	db.UpsertRelayConfig(domain.ID, "gmail", &host, 587, nil, nil, nil, true, true)
+
+	// Deactivate
+	err := db.DeactivateRelayConfig(domain.ID, "gmail")
+	if err != nil {
+		t.Fatalf("DeactivateRelayConfig: %v", err)
+	}
+
+	rc, _ := db.GetRelayConfig(domain.ID)
+	if rc != nil {
+		t.Error("expected no active config after deactivation")
+	}
+
+	// Config should still exist
+	gmail, _ := db.GetRelayConfigByMethod(domain.ID, "gmail")
+	if gmail == nil {
+		t.Error("expected gmail config to still exist after deactivation")
+	}
+}
+
+func TestRelayConfigActivateNonExistent(t *testing.T) {
+	db := testDB(t)
+
+	domain, _ := db.CreateDomain("drcs.ca", "signpost")
+
+	err := db.ActivateRelayConfig(domain.ID, "gmail")
+	if err == nil {
+		t.Error("expected error activating non-existent config")
 	}
 }
 
@@ -263,7 +366,7 @@ func TestRelayConfigCascadeDelete(t *testing.T) {
 
 	domain, _ := db.CreateDomain("drcs.ca", "signpost")
 	host := "smtp.gmail.com"
-	db.UpsertRelayConfig(domain.ID, "gmail", &host, 587, nil, nil, nil, true)
+	db.UpsertRelayConfig(domain.ID, "gmail", &host, 587, nil, nil, nil, true, true)
 
 	// Deleting the domain should cascade to relay config
 	db.DeleteDomain(domain.ID)

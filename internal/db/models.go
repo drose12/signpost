@@ -29,6 +29,7 @@ type RelayConfig struct {
 	PasswordNonce *string   `json:"-"`
 	StartTLS      bool      `json:"starttls"`
 	AuthMethod    string    `json:"auth_method"` // plain (default, Maddy relay) or login (Go direct relay)
+	Active        bool      `json:"active"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }

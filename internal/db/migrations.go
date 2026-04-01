@@ -113,4 +113,30 @@ var migrations = []string{
 
 	// Migration 5: Add egress host setting for direct delivery SPF
 	`INSERT OR IGNORE INTO settings (key, value) VALUES ('egress_host', '');`,
+
+	// Migration 6: Support multiple relay configs per domain (one per method).
+	// Drops UNIQUE(domain_id) in favor of UNIQUE(domain_id, method).
+	// Adds 'active' column so only one method is active at a time per domain.
+	`CREATE TABLE relay_configs_new (
+		id             INTEGER PRIMARY KEY AUTOINCREMENT,
+		domain_id      INTEGER NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+		method         TEXT NOT NULL DEFAULT 'direct',
+		host           TEXT,
+		port           INTEGER DEFAULT 587,
+		username       TEXT,
+		password_enc   TEXT,
+		password_nonce TEXT,
+		starttls       BOOLEAN NOT NULL DEFAULT 1,
+		auth_method    TEXT NOT NULL DEFAULT 'plain',
+		active         BOOLEAN NOT NULL DEFAULT 0,
+		created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(domain_id, method)
+	);
+
+	INSERT INTO relay_configs_new (id, domain_id, method, host, port, username, password_enc, password_nonce, starttls, auth_method, active, created_at, updated_at)
+	SELECT id, domain_id, method, host, port, username, password_enc, password_nonce, starttls, auth_method, 1, created_at, updated_at FROM relay_configs;
+
+	DROP TABLE relay_configs;
+	ALTER TABLE relay_configs_new RENAME TO relay_configs;`,
 }
