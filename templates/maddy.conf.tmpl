@@ -42,6 +42,7 @@ tls &acme_tls
 
 target.smtp relay_{{$i}} {
     targets tcp://127.0.0.1:2500
+    attempt_starttls no
 }
 {{- else}}
 
