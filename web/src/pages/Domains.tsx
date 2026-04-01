@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch';
 
 import {
   PlusIcon, CopyIcon, KeyIcon, TrashIcon, Eye, EyeOff,
-  Mail, Globe, Server, Settings, AlertTriangle, Pencil, Zap,
+  Mail, Globe, Server, Settings, Pencil, Zap,
   DownloadIcon, UploadIcon,
 } from 'lucide-react';
 import { DnsCheckTable } from '@/components/DnsCheckTable';
@@ -244,16 +244,10 @@ function RelayMethodCard({
       </div>
 
       {showLoginWarning && (
-        <div className="mt-3 ml-7 p-3 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
-          <div className="flex gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-800 dark:text-amber-300">
-              <strong>LOGIN auth relay:</strong> Mail is always DKIM signed. Web UI sends use Go
-              to relay through this ISP with LOGIN auth. External clients (port 587) go through
-              Maddy which can't do LOGIN — those emails are DKIM signed but delivered directly
-              from your server IP (SPF may not pass unless your IP is in the SPF record).
-            </p>
-          </div>
+        <div className="mt-3 ml-7 p-2 rounded-md bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800">
+          <p className="text-xs text-blue-700 dark:text-blue-300">
+            LOGIN auth — relayed through local msmtpd proxy.
+          </p>
         </div>
       )}
 
