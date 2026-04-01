@@ -102,6 +102,12 @@ func (db *DB) UpdateDomainDNSRecords(id int64, spf, dmarc string) error {
 
 // DeleteDomain removes a domain by ID.
 func (db *DB) DeleteDomain(id int64) error {
+	// Delete dependent records first (CASCADE may not work if foreign_keys pragma
+	// isn't active on all connections, e.g., Maddy's connection)
+	db.Exec(`DELETE FROM relay_configs WHERE domain_id = ?`, id)
+	db.Exec(`DELETE FROM smtp_user_domains WHERE domain_id = ?`, id)
+	db.Exec(`UPDATE mail_log SET domain_id = NULL WHERE domain_id = ?`, id)
+
 	result, err := db.Exec(`DELETE FROM domains WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("deleting domain %d: %w", id, err)
