@@ -105,7 +105,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 ### Phase 4 — Polish & Release (not started)
 - [ ] 4.1: Backup/restore
 - [ ] 4.2: Multi-domain support
-- [ ] 4.3: Documentation (setup guide, DNS config, relay setup, troubleshooting, **upgrade runbook**)
+- [x] 4.3: Documentation (README with setup guide, DNS config, relay setup, troubleshooting, full API reference)
 - [ ] 4.4: Release automation (tag → ghcr.io → GitHub Release)
 - [ ] 4.5: Production hardening (version pinning strategy, upgrade-test CI job, Dependabot → integration test gate)
 
@@ -123,7 +123,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.3.0 — tagged 2026-03-31
+v0.4.0 — comprehensive documentation rewrite, full README with API reference
 
 ## Deployment Process
 
