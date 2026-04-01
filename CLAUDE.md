@@ -123,15 +123,26 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.2.0 — tagged 2026-03-31
+v0.3.0 — tagged 2026-03-31
+
+## Deployment Process
+
+**DO NOT auto-deploy after every change.** Wait for the user to say "deploy to dev", then:
+
+1. Run all Go tests: `CGO_ENABLED=1 go test -race ./internal/...`
+2. Run frontend tests: `cd web && npx vitest run`
+3. Run frontend build: `cd web && npm run build`
+4. If tests/build pass: bump version in `cmd/signpost/main.go`, commit, tag
+5. Deploy: `docker compose -f docker-compose.dev.yml up --build -d`
+6. Verify: `curl http://localhost:8081/api/v1/healthz`
+
+Only commit code when changes are ready. Do not rebuild the container on every file change.
 
 ## How to Pick Up
 
 1. Read this file
 2. Run `CGO_ENABLED=1 go test -race ./internal/...` to verify Go tests (100+ tests across 6 packages)
 3. Run `cd web && npx vitest run` to verify frontend tests (5 tests)
-4. `docker compose -f docker-compose.dev.yml up --build -d` to start the container
-5. Test: `curl http://localhost:8080/api/v1/healthz` and browse to `http://localhost:8080/`
 6. **Phase 2 Web UI is complete.** Next priorities:
    - Configure DNS records on Cloudflare for drcs.ca (DKIM/SPF/DMARC)
    - Configure Gmail relay (app password) for production mail delivery
