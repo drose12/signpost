@@ -76,6 +76,99 @@ function DnsRecordsCard({ domain }: { domain: Domain }) {
 }
 
 // ---------------------------------------------------------------------------
+// Egress Host Field (for Direct Delivery SPF)
+// ---------------------------------------------------------------------------
+
+function EgressHostField({ publicIP }: { publicIP: string | null }) {
+  const [egressHost, setEgressHost] = useState('');
+  const [resolvedIP, setResolvedIP] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    api.get<Record<string, string>>('/settings').then((s) => {
+      setEgressHost(s.egress_host || '');
+      setLoaded(true);
+    }).catch(() => setLoaded(false));
+  }, []);
+
+  async function validate(host: string) {
+    if (!host.trim()) {
+      setResolvedIP(null);
+      return;
+    }
+    try {
+      // Use DNS lookup via our API — resolve the FQDN
+      const resp = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(host.trim())}&type=A`);
+      const data = await resp.json();
+      if (data.Answer && data.Answer.length > 0) {
+        setResolvedIP(data.Answer[0].data);
+      } else {
+        setResolvedIP(null);
+      }
+    } catch {
+      setResolvedIP(null);
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await api.put('/settings', { egress_host: egressHost.trim() });
+      toast.success(egressHost.trim() ? `Egress host set to ${egressHost.trim()}` : 'Egress host cleared');
+      if (egressHost.trim()) validate(egressHost.trim());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!loaded) return null;
+
+  return (
+    <div className="mt-3 pl-7 space-y-2">
+      <div className="space-y-1.5">
+        <Label htmlFor="egress-host" className="text-xs text-slate-600 dark:text-slate-400">
+          Egress hostname (dynamic DNS)
+        </Label>
+        <div className="flex gap-2 items-center">
+          <Input
+            id="egress-host"
+            value={egressHost}
+            onChange={(e) => {
+              setEgressHost(e.target.value);
+              setResolvedIP(null);
+            }}
+            onBlur={() => validate(egressHost)}
+            placeholder="e.g., myhost.dyndns.org"
+            className="h-8 text-sm max-w-[280px]"
+          />
+          <Button size="sm" className="h-8" onClick={handleSave} disabled={saving}>
+            {saving ? '...' : 'Save'}
+          </Button>
+        </div>
+        {egressHost.trim() && resolvedIP && (
+          <p className="text-xs text-green-600 dark:text-green-400">
+            Resolves to {resolvedIP}
+            {publicIP && resolvedIP === publicIP && ' — matches your public IP'}
+            {publicIP && resolvedIP !== publicIP && <span className="text-amber-600 dark:text-amber-400"> — does not match your public IP ({publicIP})</span>}
+          </p>
+        )}
+        {egressHost.trim() && resolvedIP === null && loaded && (
+          <p className="text-xs text-slate-400">Enter hostname and click Save to validate</p>
+        )}
+        {!egressHost.trim() && publicIP && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            No hostname set — SPF will use <code className="font-mono bg-slate-100 dark:bg-slate-700 px-1 rounded">ip4:{publicIP}</code> (may change if your IP is dynamic)
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Relay Method Sub-Card
 // ---------------------------------------------------------------------------
 
@@ -161,11 +254,7 @@ function RelayMethodCard({
         </div>
       )}
 
-      {method === 'direct' && isConfigured && publicIP && (
-        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 pl-7">
-          Ensure <code className="font-mono bg-slate-100 dark:bg-slate-700 px-1 rounded">ip4:{publicIP}</code> is in your SPF record.
-        </p>
-      )}
+      {method === 'direct' && <EgressHostField publicIP={publicIP} />}
     </div>
   );
 }
