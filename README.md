@@ -19,7 +19,7 @@ SignPost sits between your local services (NAS, home automation, monitoring) and
 ### 1. Pull the image
 
 ```bash
-docker pull drosedrcs/signpost:latest
+docker pull ghcr.io/drose12/signpost:latest
 ```
 
 ### 2. Create a docker-compose.yml
@@ -27,7 +27,7 @@ docker pull drosedrcs/signpost:latest
 ```yaml
 services:
   signpost:
-    image: drosedrcs/signpost:latest
+    image: ghcr.io/drose12/signpost:latest
     ports:
       - "25:25"       # SMTP (local services)
       - "587:587"     # Submission (authenticated)
@@ -69,7 +69,7 @@ Navigate to `http://your-server:8080`. Log in with username `admin` and the pass
 ```yaml
 services:
   signpost:
-    image: drosedrcs/signpost:latest
+    image: ghcr.io/drose12/signpost:latest
     ports:
       - "25:25"
       - "587:587"
@@ -91,7 +91,7 @@ volumes:
 ```yaml
 services:
   signpost:
-    image: drosedrcs/signpost:latest
+    image: ghcr.io/drose12/signpost:latest
     ports:
       - "25:25"
       - "587:587"
@@ -119,7 +119,7 @@ Bind the web UI to localhost and let your reverse proxy handle TLS termination:
 ```yaml
 services:
   signpost:
-    image: drosedrcs/signpost:latest
+    image: ghcr.io/drose12/signpost:latest
     ports:
       - "25:25"
       - "587:587"
@@ -146,7 +146,7 @@ Dockge requires all services in a single compose file without external networks.
 ```yaml
 services:
   signpost:
-    image: drosedrcs/signpost:latest
+    image: ghcr.io/drose12/signpost:latest
     ports:
       - "25:25"
       - "587:587"

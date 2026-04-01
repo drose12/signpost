@@ -10,7 +10,7 @@ A Docker-based local SMTP relay that DKIM-signs outgoing mail and relays through
 - **Container:** Single Docker container with s6-overlay managing Maddy + Go web app
 - **Owner:** drose, domain drcs.ca on Cloudflare DNS, Gmail-hosted email
 - **Prod server:** root@ubuntu01.drcs.ca
-- **Repo:** github.com/drose-drcs/signpost (private)
+- **Repo:** github.com/drose12/signpost (private)
 
 ## Key Files
 

@@ -1,6 +1,6 @@
 services:
   signpost:
-    image: ghcr.io/drose-drcs/signpost:latest
+    image: ghcr.io/drose12/signpost:latest
     ports:
       - "25:25"
       - "587:587"
