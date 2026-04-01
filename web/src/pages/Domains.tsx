@@ -62,14 +62,14 @@ const ALL_METHODS: RelayMethod[] = ['gmail', 'isp', 'direct', 'custom'];
 // DNS Records Card
 // ---------------------------------------------------------------------------
 
-function DnsRecordsCard({ domain }: { domain: Domain }) {
+function DnsRecordsCard({ domain, refreshKey }: { domain: Domain; refreshKey?: number }) {
   return (
     <Card className="dark:bg-slate-800">
       <CardHeader>
         <CardTitle className="text-base">DNS Records</CardTitle>
       </CardHeader>
       <CardContent>
-        <DnsCheckTable domainId={domain.id} />
+        <DnsCheckTable key={`${domain.id}-${refreshKey ?? 0}`} domainId={domain.id} />
       </CardContent>
     </Card>
   );
@@ -79,7 +79,7 @@ function DnsRecordsCard({ domain }: { domain: Domain }) {
 // Egress Host Field (for Direct Delivery SPF)
 // ---------------------------------------------------------------------------
 
-function EgressHostField({ publicIP }: { publicIP: string | null }) {
+function EgressHostField({ publicIP, onSaved }: { publicIP: string | null; onSaved?: () => void }) {
   const [egressHost, setEgressHost] = useState('');
   const [resolvedIP, setResolvedIP] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -117,6 +117,7 @@ function EgressHostField({ publicIP }: { publicIP: string | null }) {
       await api.put('/settings', { egress_host: egressHost.trim() });
       toast.success(egressHost.trim() ? `Egress host set to ${egressHost.trim()}` : 'Egress host cleared');
       if (egressHost.trim()) validate(egressHost.trim());
+      onSaved?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -180,6 +181,7 @@ function RelayMethodCard({
   publicIP,
   onActivate,
   onEdit,
+  onDnsRefresh,
 }: {
   method: RelayMethod;
   values: MethodFormValues | null;
@@ -188,6 +190,7 @@ function RelayMethodCard({
   publicIP: string | null;
   onActivate: () => void;
   onEdit: () => void;
+  onDnsRefresh?: () => void;
 }) {
   const Icon = METHOD_ICONS[method];
   const isLogin = values?.authMethod === 'login';
@@ -254,7 +257,7 @@ function RelayMethodCard({
         </div>
       )}
 
-      {method === 'direct' && <EgressHostField publicIP={publicIP} />}
+      {method === 'direct' && <EgressHostField publicIP={publicIP} onSaved={onDnsRefresh} />}
     </div>
   );
 }
@@ -455,7 +458,7 @@ function RelayEditDialog({
 // Relay Configuration Card
 // ---------------------------------------------------------------------------
 
-function RelayConfigCard({ domain }: { domain: Domain }) {
+function RelayConfigCard({ domain, onDnsRefresh }: { domain: Domain; onDnsRefresh?: () => void }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -605,6 +608,7 @@ function RelayConfigCard({ domain }: { domain: Domain }) {
                 publicIP={m === 'direct' ? publicIP : null}
                 onActivate={() => handleActivate(m)}
                 onEdit={() => handleEdit(m)}
+                onDnsRefresh={onDnsRefresh}
               />
             ))}
 
@@ -920,6 +924,7 @@ export function Domains() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [dnsRefreshKey, setDnsRefreshKey] = useState(0);
   const [domainHealth, setDomainHealth] = useState<Record<number, DomainHealth>>({});
 
   const fetchDomains = useCallback(async () => {
@@ -1048,8 +1053,8 @@ export function Domains() {
       {selectedDomain && (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{selectedDomain.name}</h2>
-          <DnsRecordsCard domain={selectedDomain} />
-          <RelayConfigCard key={`relay-${selectedDomain.id}`} domain={selectedDomain} />
+          <DnsRecordsCard domain={selectedDomain} refreshKey={dnsRefreshKey} />
+          <RelayConfigCard key={`relay-${selectedDomain.id}`} domain={selectedDomain} onDnsRefresh={() => setDnsRefreshKey((k) => k + 1)} />
           <DkimKeysCard domain={selectedDomain} onRefresh={handleRefresh} />
           <SettingsCard domain={selectedDomain} onDeleted={handleDeleted} />
         </div>
