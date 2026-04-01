@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/drose-drcs/signpost/internal/db"
@@ -25,7 +26,7 @@ func TestPerformDNSCheck_NoRecords(t *testing.T) {
 	// All lookups fail — everything should be missing
 	lookup := fakeLookupTXT(map[string][]string{})
 
-	records := performDNSCheck("example.com", "signpost", nil, nil, lookup)
+	records := performDNSCheck("example.com", "signpost", nil, nil, "", lookup)
 
 	if len(records) != 3 {
 		t.Fatalf("expected 3 records, got %d", len(records))
@@ -61,13 +62,16 @@ func TestPerformDNSCheck_NoRecords(t *testing.T) {
 
 func TestPerformDNSCheck_AllPresent(t *testing.T) {
 	dkimPub := "v=DKIM1; k=rsa; p=MIIBIjANBg..."
+	host := "smtp.gmail.com"
+	relay := &db.RelayConfig{Method: "gmail", Host: &host}
 	lookup := fakeLookupTXT(map[string][]string{
-		"example.com":                        {"v=spf1 mx a:mail.example.com ~all"},
+		"example.com":                        {"v=spf1 include:_spf.google.com ~all"},
+		"_spf.google.com":                    {"v=spf1 ip4:209.85.128.0/17 ~all"},
 		"signpost._domainkey.example.com":    {dkimPub},
 		"_dmarc.example.com":                 {"v=DMARC1; p=quarantine; ruf=mailto:postmaster@example.com; fo=1"},
 	})
 
-	records := performDNSCheck("example.com", "signpost", &dkimPub, nil, lookup)
+	records := performDNSCheck("example.com", "signpost", &dkimPub, relay, "", lookup)
 
 	if len(records) != 3 {
 		t.Fatalf("expected 3 records, got %d", len(records))
@@ -96,7 +100,7 @@ func TestPerformDNSCheck_SPFUpdateNeeded(t *testing.T) {
 		"_dmarc.example.com": {"v=DMARC1; p=none"},
 	})
 
-	records := performDNSCheck("example.com", "signpost", nil, relay, lookup)
+	records := performDNSCheck("example.com", "signpost", nil, relay, "", lookup)
 
 	spf := records[0]
 	if spf.Status != "update" {
@@ -120,7 +124,7 @@ func TestPerformDNSCheck_SPFAlreadyIncludesGmail(t *testing.T) {
 		"_dmarc.example.com": {"v=DMARC1; p=none"},
 	})
 
-	records := performDNSCheck("example.com", "signpost", nil, relay, lookup)
+	records := performDNSCheck("example.com", "signpost", nil, relay, "", lookup)
 
 	spf := records[0]
 	if spf.Status != "ok" {
@@ -136,7 +140,7 @@ func TestPerformDNSCheck_DKIMConflict(t *testing.T) {
 		"_dmarc.example.com":              {"v=DMARC1; p=none"},
 	})
 
-	records := performDNSCheck("example.com", "signpost", &expectedDKIM, nil, lookup)
+	records := performDNSCheck("example.com", "signpost", &expectedDKIM, nil, "", lookup)
 
 	dkimRec := records[1]
 	if dkimRec.Status != "conflict" {
@@ -156,7 +160,7 @@ func TestPerformDNSCheck_CustomRelay(t *testing.T) {
 		"_dmarc.example.com": {"v=DMARC1; p=reject"},
 	})
 
-	records := performDNSCheck("example.com", "signpost", nil, relay, lookup)
+	records := performDNSCheck("example.com", "signpost", nil, relay, "", lookup)
 
 	spf := records[0]
 	if spf.Status != "update" {
@@ -205,23 +209,30 @@ func TestMergeSPF(t *testing.T) {
 
 func TestSPFMechanismForRelay(t *testing.T) {
 	tests := []struct {
-		name  string
-		relay *db.RelayConfig
-		want  string
+		name       string
+		relay      *db.RelayConfig
+		egressHost string
+		wantExact  string // exact match, or empty to skip exact check
+		wantPrefix string // prefix match, or empty to skip
 	}{
-		{"nil relay", nil, ""},
-		{"direct", &db.RelayConfig{Method: "direct"}, ""},
-		{"gmail", &db.RelayConfig{Method: "gmail"}, "include:_spf.google.com"},
-		{"isp with host", &db.RelayConfig{Method: "isp", Host: strPtr("smtp.bellmts.net")}, "include:smtp.bellmts.net"},
-		{"custom with host", &db.RelayConfig{Method: "custom", Host: strPtr("relay.example.com")}, "include:relay.example.com"},
-		{"isp no host", &db.RelayConfig{Method: "isp"}, ""},
+		{"nil relay no egress", nil, "", "", "ip4:"}, // auto-detects public IP
+		{"nil relay with egress", nil, "myhost.dyndns.org", "a:myhost.dyndns.org", ""},
+		{"direct no egress", &db.RelayConfig{Method: "direct"}, "", "", "ip4:"},
+		{"direct with egress", &db.RelayConfig{Method: "direct"}, "home.example.com", "a:home.example.com", ""},
+		{"gmail", &db.RelayConfig{Method: "gmail"}, "", "include:_spf.google.com", ""},
+		{"isp with host", &db.RelayConfig{Method: "isp", Host: strPtr("smtp.bellmts.net")}, "", "include:smtp.bellmts.net", ""},
+		{"custom with host", &db.RelayConfig{Method: "custom", Host: strPtr("relay.example.com")}, "", "include:relay.example.com", ""},
+		{"isp no host", &db.RelayConfig{Method: "isp"}, "", "", ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := spfMechanismForRelay(tt.relay)
-			if got != tt.want {
-				t.Errorf("spfMechanismForRelay(%s) = %q, want %q", tt.name, got, tt.want)
+			got := spfMechanismForRelay(tt.relay, tt.egressHost)
+			if tt.wantExact != "" && got != tt.wantExact {
+				t.Errorf("spfMechanismForRelay(%s) = %q, want %q", tt.name, got, tt.wantExact)
+			}
+			if tt.wantPrefix != "" && !strings.HasPrefix(got, tt.wantPrefix) {
+				t.Errorf("spfMechanismForRelay(%s) = %q, want prefix %q", tt.name, got, tt.wantPrefix)
 			}
 		})
 	}

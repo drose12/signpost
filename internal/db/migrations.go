@@ -110,4 +110,7 @@ var migrations = []string{
 	// Migration 4: Add encrypted password columns to smtp_users for display
 	`ALTER TABLE smtp_users ADD COLUMN password_enc TEXT;
 	 ALTER TABLE smtp_users ADD COLUMN password_nonce TEXT;`,
+
+	// Migration 5: Add egress host setting for direct delivery SPF
+	`INSERT OR IGNORE INTO settings (key, value) VALUES ('egress_host', '');`,
 }

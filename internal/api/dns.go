@@ -157,7 +157,10 @@ func (s *Server) handleDNSCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	records := performDNSCheck(domain.Name, domain.DKIMSelector, domain.DKIMPublicDNS, relay, defaultLookupTXT)
+	// Get egress host setting for direct delivery SPF
+	egressHost, _ := s.db.GetSetting("egress_host")
+
+	records := performDNSCheck(domain.Name, domain.DKIMSelector, domain.DKIMPublicDNS, relay, egressHost, defaultLookupTXT)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"records": records,
@@ -166,11 +169,11 @@ func (s *Server) handleDNSCheck(w http.ResponseWriter, r *http.Request) {
 
 // performDNSCheck runs the actual DNS comparison logic. It accepts a lookup function
 // so tests can inject a fake resolver.
-func performDNSCheck(domainName, dkimSelector string, dkimPublicDNS *string, relay *db.RelayConfig, lookupTXT dnsLookupFunc) []dnsCheckRecord {
+func performDNSCheck(domainName, dkimSelector string, dkimPublicDNS *string, relay *db.RelayConfig, egressHost string, lookupTXT dnsLookupFunc) []dnsCheckRecord {
 	var records []dnsCheckRecord
 
 	// SPF check
-	records = append(records, checkSPF(domainName, relay, lookupTXT))
+	records = append(records, checkSPF(domainName, relay, egressHost, lookupTXT))
 
 	// DKIM check
 	if dkimPublicDNS != nil {
@@ -203,12 +206,12 @@ func performDNSCheck(domainName, dkimSelector string, dkimPublicDNS *string, rel
 }
 
 // checkSPF checks the SPF record for a domain.
-func checkSPF(domainName string, relay *db.RelayConfig, lookupTXT dnsLookupFunc) dnsCheckRecord {
+func checkSPF(domainName string, relay *db.RelayConfig, egressHost string, lookupTXT dnsLookupFunc) dnsCheckRecord {
 	hostname := "mail." + domainName
 	recommended := dkim.RecommendedSPF(hostname)
 
 	// Determine what SPF mechanism we need based on relay config
-	neededMechanism := spfMechanismForRelay(relay)
+	neededMechanism := spfMechanismForRelay(relay, egressHost)
 
 	txts, err := lookupTXT(domainName)
 	if err != nil || len(txts) == 0 {
@@ -403,9 +406,10 @@ func checkDMARC(domainName string, lookupTXT dnsLookupFunc) dnsCheckRecord {
 // spfMechanismForRelay returns the SPF mechanism needed for the configured relay.
 // For ISP/custom relays, it checks whether the host publishes an SPF record.
 // If not, it resolves the host to an IP and returns ip4: instead of include:.
-func spfMechanismForRelay(relay *db.RelayConfig) string {
-	if relay == nil {
-		return ""
+// egressHost is the user-configured FQDN or empty string.
+func spfMechanismForRelay(relay *db.RelayConfig, egressHost string) string {
+	if relay == nil || relay.Method == "direct" || relay.Method == "" {
+		return egressMechanism(egressHost)
 	}
 	switch relay.Method {
 	case "gmail":
@@ -432,8 +436,30 @@ func spfMechanismForRelay(relay *db.RelayConfig) string {
 		// Fallback to include: even though it may not work
 		return "include:" + host
 	default:
+		return egressMechanism(egressHost)
+	}
+}
+
+// egressMechanism returns the SPF mechanism for direct delivery.
+// Uses the configured egress FQDN if set, otherwise detects public IP.
+func egressMechanism(egressHost string) string {
+	if egressHost != "" {
+		return "a:" + egressHost
+	}
+	// Try to detect public IP
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("https://ifconfig.co")
+	if err != nil {
 		return ""
 	}
+	defer resp.Body.Close()
+	buf := make([]byte, 256)
+	n, _ := resp.Body.Read(buf)
+	ip := strings.TrimSpace(string(buf[:n]))
+	if ip != "" {
+		return "ip4:" + ip
+	}
+	return ""
 }
 
 // mergeSPF inserts a mechanism into an existing SPF record before the ~all or -all qualifier.
