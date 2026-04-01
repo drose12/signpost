@@ -830,15 +830,36 @@ func (s *Server) handleTestSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer c.Close()
-	c.Hello("localhost")
+	if err := c.Hello("localhost"); err != nil {
+		errStr := err.Error()
+		s.db.LogMail(req.From, req.To, nil, req.Subject, "failed", nil, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "failed", "error": errStr})
+		return
+	}
 	if ok, _ := c.Extension("STARTTLS"); ok {
 		c.StartTLS(&tls.Config{InsecureSkipVerify: true})
 	}
-	c.Mail(req.From)
-	c.Rcpt(req.To)
-	wc, _ := c.Data()
+	if err := c.Mail(req.From); err != nil {
+		errStr := err.Error()
+		s.db.LogMail(req.From, req.To, nil, req.Subject, "failed", nil, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "failed", "error": errStr})
+		return
+	}
+	if err := c.Rcpt(req.To); err != nil {
+		errStr := err.Error()
+		s.db.LogMail(req.From, req.To, nil, req.Subject, "failed", nil, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "failed", "error": errStr})
+		return
+	}
+	wc, err := c.Data()
+	if err != nil {
+		errStr := err.Error()
+		s.db.LogMail(req.From, req.To, nil, req.Subject, "failed", nil, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "failed", "error": errStr})
+		return
+	}
 	wc.Write([]byte(msg))
-	err := wc.Close()
+	err = wc.Close()
 	c.Quit()
 	if err != nil {
 		errStr := err.Error()
