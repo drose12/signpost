@@ -5,7 +5,7 @@ import type { DNSCheckRecord, DNSCheckResponse } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+// Alert removed — no longer needed
 import { CopyIcon, RefreshCwIcon, CheckCircleIcon, AlertTriangleIcon, XCircleIcon } from 'lucide-react';
 
 function statusBadge(status: DNSCheckRecord['status']) {
@@ -68,8 +68,6 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
     if (autoCheck) runCheck();
   }, [autoCheck, runCheck]);
 
-  const needsAction = records.some((r) => r.status !== 'ok');
-
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -87,15 +85,6 @@ export function DnsCheckTable({ domainId, autoCheck = true }: DnsCheckTableProps
         <p className="text-slate-500 dark:text-slate-400 text-sm">No DNS records to check. Generate DKIM keys first.</p>
       ) : (
         <>
-          {!needsAction && (
-            <Alert className="border-green-200 bg-green-50 dark:bg-green-950 dark:border-green-800">
-              <CheckCircleIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <AlertDescription className="text-green-700 dark:text-green-300 text-sm">
-                All DNS records look good! No changes needed.
-              </AlertDescription>
-            </Alert>
-          )}
-
           <div className="overflow-x-auto">
           <Table className="table-fixed w-full">
             <TableHeader>
