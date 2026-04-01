@@ -1,9 +1,9 @@
 // web/src/pages/Dashboard.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api } from '@/api';
-import type { StatusResponse, MailLogEntry, Domain, TestSendResponse } from '@/types';
+import type { StatusResponse, Domain, TestSendResponse } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,27 +11,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
-import { ServerIcon, GlobeIcon, InfoIcon, Send } from 'lucide-react';
-
-function formatTime(ts: string): string {
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return ts;
-  }
-}
-
-function statusVariant(status: string): 'default' | 'destructive' | 'secondary' | 'outline' {
-  switch (status.toLowerCase()) {
-    case 'sent': return 'default';
-    case 'failed': return 'destructive';
-    case 'deferred': return 'secondary';
-    default: return 'outline';
-  }
-}
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { InfoIcon, Send, DownloadIcon, UploadIcon } from 'lucide-react';
 
 function TestEmailCard() {
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -262,9 +252,109 @@ function SMTPPortsCard() {
   );
 }
 
+function SystemBackupCard() {
+  const [restoring, setRestoring] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  async function handleBackup() {
+    try {
+      const blob = await api.blob('/backup');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const date = new Date().toISOString().slice(0, 10);
+      a.download = `signpost-backup-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Backup downloaded');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Backup failed');
+    }
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingFile(file);
+    setShowConfirm(true);
+    if (importFileRef.current) importFileRef.current.value = '';
+  }
+
+  async function handleRestore() {
+    if (!pendingFile) return;
+    try {
+      setRestoring(true);
+      const text = await pendingFile.text();
+      const payload = JSON.parse(text);
+      const result = await api.post<{ domains: number; smtp_users: number; settings_keys: number }>('/backup/restore', payload);
+      toast.success(`Restored ${result.domains} domain(s), ${result.smtp_users} user(s), ${result.settings_keys} setting(s)`);
+      setShowConfirm(false);
+      setPendingFile(null);
+      // Reload page to reflect restored state
+      window.location.reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Restore failed');
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  return (
+    <>
+      <Card className="dark:bg-slate-800">
+        <CardContent className="pt-4 pb-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">System Backup</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={handleBackup}>
+                <DownloadIcon className="h-3.5 w-3.5 mr-1" />
+                Backup
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={() => importFileRef.current?.click()}>
+                <UploadIcon className="h-3.5 w-3.5 mr-1" />
+                Restore
+              </Button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={showConfirm} onOpenChange={(open) => { if (!open) { setShowConfirm(false); setPendingFile(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restore from Backup</DialogTitle>
+            <DialogDescription>
+              This will restore all domains, DKIM keys, relay configs, SMTP users, and settings from{' '}
+              <strong>{pendingFile?.name}</strong>. Existing entries will be updated.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowConfirm(false); setPendingFile(null); }}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleRestore} disabled={restoring}>
+              {restoring ? 'Restoring...' : 'Restore'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function Dashboard() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
-  const [logs, setLogs] = useState<MailLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -273,12 +363,8 @@ export function Dashboard() {
       try {
         setLoading(true);
         setError(null);
-        const [statusData, logsData] = await Promise.all([
-          api.get<StatusResponse>('/status'),
-          api.get<MailLogEntry[]>('/logs?limit=10'),
-        ]);
+        const statusData = await api.get<StatusResponse>('/status');
         setStatus(statusData);
-        setLogs(logsData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
       } finally {
@@ -311,22 +397,20 @@ export function Dashboard() {
       {/* Status cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="dark:bg-slate-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">Maddy Status</CardTitle>
-            <ServerIcon className="h-4 w-4 text-slate-400" />
-          </CardHeader>
-          <CardContent>
-            <StatusBadge status={status?.maddy_status ?? 'unknown'} />
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Maddy</span>
+              <StatusBadge status={status?.maddy_status ?? 'unknown'} />
+            </div>
           </CardContent>
         </Card>
 
         <Card className="dark:bg-slate-800">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">Domains</CardTitle>
-            <GlobeIcon className="h-4 w-4 text-slate-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{status?.domain_count ?? 0}</div>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Domains</span>
+              <span className="text-lg font-semibold text-slate-800 dark:text-slate-100">{status?.domain_count ?? 0}</span>
+            </div>
           </CardContent>
         </Card>
 
@@ -378,48 +462,8 @@ export function Dashboard() {
       {/* Send Test Email */}
       {status && status.domain_count > 0 && <TestEmailCard />}
 
-      {/* Recent activity */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Recent Activity</h2>
-          <Link to="/logs" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
-            View all
-          </Link>
-        </div>
-
-        <Card className="dark:bg-slate-800">
-          <CardContent className="p-0">
-            {logs.length === 0 ? (
-              <p className="text-slate-500 dark:text-slate-400 text-sm p-4 text-center">No recent activity</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Time</TableHead>
-                    <TableHead>From</TableHead>
-                    <TableHead>To</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logs.map((entry) => (
-                    <TableRow key={entry.id}>
-                      <TableCell className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {formatTime(entry.timestamp)}
-                      </TableCell>
-                      <TableCell className="text-sm max-w-[160px] truncate">{entry.from_addr}</TableCell>
-                      <TableCell className="text-sm max-w-[160px] truncate">{entry.to_addr}</TableCell>
-                      <TableCell>
-                        <Badge variant={statusVariant(entry.status)}>{entry.status}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* System Backup */}
+      <SystemBackupCard />
     </div>
   );
 }

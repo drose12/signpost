@@ -119,6 +119,21 @@ func (db *DB) UpdateSMTPUserPassword(id int64, passwordHash string, passwordEnc,
 	return nil
 }
 
+// GetSMTPUserByUsername returns an SMTP user by username, or nil if not found.
+func (db *DB) GetSMTPUserByUsername(username string) (*SMTPUser, error) {
+	var u SMTPUser
+	err := db.QueryRow(`SELECT id, username, password_hash, password_enc, password_nonce, active, created_at, updated_at
+		FROM smtp_users WHERE username = ?`, username).Scan(
+		&u.ID, &u.Username, &u.PasswordHash, &u.PasswordEnc, &u.PasswordNonce, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("getting SMTP user %q: %w", username, err)
+	}
+	return &u, nil
+}
+
 // CountSMTPUsers returns the number of active SMTP users.
 func (db *DB) CountSMTPUsers() (int, error) {
 	var count int

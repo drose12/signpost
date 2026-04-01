@@ -1,5 +1,5 @@
 // web/src/pages/SMTPUsers.tsx
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { api } from '@/api';
 import type { SMTPUser } from '@/types';
@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Users, Plus, Trash2, KeyRound, Eye, EyeOff, CopyIcon, Power } from 'lucide-react';
+import { Users, Plus, Trash2, KeyRound, Eye, EyeOff, CopyIcon, Power, DownloadIcon, UploadIcon } from 'lucide-react';
 
 function formatTime(ts: string): string {
   try {
@@ -61,6 +61,41 @@ export function SMTPUsers() {
       else next.add(id);
       return next;
     });
+  }
+
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  async function handleExport() {
+    try {
+      const blob = await api.blob('/smtp-users/export');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'smtp-users-signpost.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('SMTP users exported');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    }
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const result = await api.post<{ created: number; skipped: number }>('/smtp-users/import', payload);
+      toast.success(`Imported ${result.created} user(s), ${result.skipped} skipped`);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      if (importFileRef.current) importFileRef.current.value = '';
+    }
   }
 
   const fetchUsers = useCallback(async () => {
@@ -147,10 +182,27 @@ export function SMTPUsers() {
             Manage users authorized to send mail via port 587 (submission)
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowAdd(true)}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          Add User
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <DownloadIcon className="h-4 w-4 mr-1.5" />
+            Export
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => importFileRef.current?.click()}>
+            <UploadIcon className="h-4 w-4 mr-1.5" />
+            Import
+          </Button>
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleImport}
+          />
+          <Button size="sm" onClick={() => setShowAdd(true)}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Add User
+          </Button>
+        </div>
       </div>
 
       {loading ? (

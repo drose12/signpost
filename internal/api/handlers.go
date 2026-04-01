@@ -1341,3 +1341,445 @@ func (s *Server) handleImportDomainConfig(w http.ResponseWriter, r *http.Request
 
 	writeJSON(w, http.StatusOK, domain)
 }
+
+// --- SMTP Users Export/Import ---
+
+type smtpUserExportPayload struct {
+	SignpostVersion string           `json:"signpost_version"`
+	ExportedAt      string           `json:"exported_at"`
+	SMTPUsers       []smtpUserExport `json:"smtp_users"`
+}
+
+type smtpUserExport struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Active   bool   `json:"active"`
+}
+
+// handleExportSMTPUsers exports all SMTP users with decrypted passwords as a JSON download.
+func (s *Server) handleExportSMTPUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := s.db.ListSMTPUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	exported := make([]smtpUserExport, 0, len(users))
+	for _, u := range users {
+		eu := smtpUserExport{
+			Username: u.Username,
+			Active:   u.Active,
+		}
+		if u.PasswordEnc != nil && u.PasswordNonce != nil && s.encKey != nil {
+			if pw, err := crypto.Decrypt(s.encKey, *u.PasswordEnc, *u.PasswordNonce); err == nil {
+				eu.Password = pw
+			}
+		}
+		exported = append(exported, eu)
+	}
+
+	payload := smtpUserExportPayload{
+		SignpostVersion: s.version,
+		ExportedAt:      time.Now().UTC().Format(time.RFC3339),
+		SMTPUsers:       exported,
+	}
+
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode export data")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="smtp-users-signpost.json"`)
+	w.Write(data)
+}
+
+// handleImportSMTPUsers imports SMTP users from a JSON file.
+// Skips duplicates (existing usernames are left unchanged).
+func (s *Server) handleImportSMTPUsers(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
+
+	var payload smtpUserExportPayload
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
+		return
+	}
+
+	if len(payload.SMTPUsers) == 0 {
+		writeError(w, http.StatusBadRequest, "no SMTP users in import data")
+		return
+	}
+
+	created := 0
+	skipped := 0
+	for _, eu := range payload.SMTPUsers {
+		if eu.Username == "" || eu.Password == "" {
+			skipped++
+			continue
+		}
+		if len(eu.Password) < 8 {
+			skipped++
+			continue
+		}
+
+		// Check if user already exists
+		existing, err := s.db.GetSMTPUserByUsername(eu.Username)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if existing != nil {
+			skipped++
+			continue
+		}
+
+		hash, err := db.HashPassword(eu.Password)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to hash password")
+			return
+		}
+
+		var passEnc, passNonce *string
+		if s.encKey != nil {
+			enc, nonce, err := crypto.Encrypt(s.encKey, eu.Password)
+			if err == nil {
+				passEnc = &enc
+				passNonce = &nonce
+			}
+		}
+
+		if _, err := s.db.CreateSMTPUser(eu.Username, hash, passEnc, passNonce); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create user %q: %v", eu.Username, err))
+			return
+		}
+		created++
+	}
+
+	// Auto-enable submission port if users were created
+	if created > 0 {
+		count, _ := s.db.CountSMTPUsers()
+		if count > 0 {
+			s.db.SetSetting("submission_enabled", "true")
+		}
+	}
+
+	s.db.Checkpoint()
+	go s.regenerateConfig()
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "imported",
+		"created": created,
+		"skipped": skipped,
+	})
+}
+
+// --- Full System Backup/Restore ---
+
+type backupPayload struct {
+	SignpostVersion string            `json:"signpost_version"`
+	ExportedAt      string            `json:"exported_at"`
+	Domains         []backupDomain    `json:"domains"`
+	SMTPUsers       []smtpUserExport  `json:"smtp_users"`
+	Settings        map[string]string `json:"settings"`
+}
+
+type backupDomain struct {
+	Name         string              `json:"name"`
+	DKIMSelector string              `json:"dkim_selector"`
+	DKIMKey      string              `json:"dkim_key,omitempty"`
+	RelayConfigs []relayExportConfig `json:"relay_configs"`
+}
+
+// handleBackup exports the full system state: domains, DKIM keys, relay configs,
+// SMTP users, and settings as a single JSON download.
+func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
+	// Export domains + DKIM keys + relay configs
+	domains, err := s.db.ListDomains()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	exportDomains := make([]backupDomain, 0, len(domains))
+	for _, d := range domains {
+		bd := backupDomain{
+			Name:         d.Name,
+			DKIMSelector: d.DKIMSelector,
+		}
+
+		// Read DKIM private key if it exists
+		if d.DKIMKeyPath != nil && *d.DKIMKeyPath != "" {
+			keyBytes, err := os.ReadFile(*d.DKIMKeyPath)
+			if err == nil {
+				bd.DKIMKey = string(keyBytes)
+			}
+		}
+
+		// Get relay configs for this domain
+		relayConfigs, err := s.db.ListRelayConfigs(d.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		bd.RelayConfigs = make([]relayExportConfig, 0, len(relayConfigs))
+		for _, rc := range relayConfigs {
+			var password string
+			if rc.PasswordEnc != nil && rc.PasswordNonce != nil {
+				pw, err := s.decryptRelayPassword(*rc.PasswordEnc, *rc.PasswordNonce)
+				if err == nil {
+					password = pw
+				}
+			}
+			bd.RelayConfigs = append(bd.RelayConfigs, relayExportConfig{
+				Method:     rc.Method,
+				Host:       rc.Host,
+				Port:       rc.Port,
+				Username:   rc.Username,
+				Password:   password,
+				StartTLS:   rc.StartTLS,
+				AuthMethod: rc.AuthMethod,
+				Active:     rc.Active,
+			})
+		}
+
+		exportDomains = append(exportDomains, bd)
+	}
+
+	// Export SMTP users with decrypted passwords
+	users, err := s.db.ListSMTPUsers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	exportUsers := make([]smtpUserExport, 0, len(users))
+	for _, u := range users {
+		eu := smtpUserExport{
+			Username: u.Username,
+			Active:   u.Active,
+		}
+		if u.PasswordEnc != nil && u.PasswordNonce != nil && s.encKey != nil {
+			if pw, err := crypto.Decrypt(s.encKey, *u.PasswordEnc, *u.PasswordNonce); err == nil {
+				eu.Password = pw
+			}
+		}
+		exportUsers = append(exportUsers, eu)
+	}
+
+	// Export settings
+	settings, err := s.db.GetAllSettings()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	payload := backupPayload{
+		SignpostVersion: s.version,
+		ExportedAt:      time.Now().UTC().Format(time.RFC3339),
+		Domains:         exportDomains,
+		SMTPUsers:       exportUsers,
+		Settings:        settings,
+	}
+
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode backup data")
+		return
+	}
+
+	date := time.Now().Format("2006-01-02")
+	filename := fmt.Sprintf("signpost-backup-%s.json", date)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Write(data)
+}
+
+// handleRestore restores the full system from a backup JSON file.
+func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB limit
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to read request body")
+		return
+	}
+
+	var payload backupPayload
+	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
+		return
+	}
+
+	// Restore domains + DKIM keys + relay configs
+	for _, bd := range payload.Domains {
+		if bd.Name == "" {
+			continue
+		}
+
+		selector := bd.DKIMSelector
+		if selector == "" {
+			selector = "signpost"
+		}
+
+		// Create or find domain
+		domain, err := s.db.GetDomainByName(bd.Name)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if domain == nil {
+			domain, err = s.db.CreateDomain(bd.Name, selector)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create domain %q: %v", bd.Name, err))
+				return
+			}
+		}
+
+		// Write DKIM key if provided
+		if bd.DKIMKey != "" {
+			pemData := []byte(bd.DKIMKey)
+			publicKeyDNS, err := dkim.ValidateAndExtractPublicKey(pemData)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid DKIM key for %s: %v", bd.Name, err))
+				return
+			}
+
+			if err := os.MkdirAll(s.keysDir, 0750); err != nil {
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create keys directory: %v", err))
+				return
+			}
+
+			keyPath := s.keysDir + "/" + domain.Name + ".key"
+			if err := os.WriteFile(keyPath, pemData, 0600); err != nil {
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to write DKIM key for %s: %v", bd.Name, err))
+				return
+			}
+
+			if err := s.db.UpdateDomainDKIM(domain.ID, keyPath, publicKeyDNS); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+		}
+
+		// Upsert relay configs
+		for _, rc := range bd.RelayConfigs {
+			var passEnc, passNonce *string
+			if rc.Password != "" {
+				if s.encKey == nil {
+					writeError(w, http.StatusInternalServerError, "encryption key not configured (set SIGNPOST_SECRET_KEY)")
+					return
+				}
+				enc, nonce, err := crypto.Encrypt(s.encKey, rc.Password)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "failed to encrypt relay password")
+					return
+				}
+				passEnc = &enc
+				passNonce = &nonce
+			}
+
+			if err := s.db.UpsertRelayConfig(
+				domain.ID, rc.Method, rc.Host, rc.Port,
+				rc.Username, passEnc, passNonce,
+				rc.StartTLS, rc.Active,
+			); err != nil {
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to upsert relay config for %s: %v", bd.Name, err))
+				return
+			}
+		}
+	}
+
+	// Restore SMTP users
+	usersCreated := 0
+	for _, eu := range payload.SMTPUsers {
+		if eu.Username == "" || eu.Password == "" {
+			continue
+		}
+
+		// Check if user already exists
+		existing, err := s.db.GetSMTPUserByUsername(eu.Username)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if existing != nil {
+			// Update password for existing user
+			hash, err := db.HashPassword(eu.Password)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to hash password")
+				return
+			}
+			var passEnc, passNonce *string
+			if s.encKey != nil {
+				enc, nonce, err := crypto.Encrypt(s.encKey, eu.Password)
+				if err == nil {
+					passEnc = &enc
+					passNonce = &nonce
+				}
+			}
+			if err := s.db.UpdateSMTPUserPassword(existing.ID, hash, passEnc, passNonce); err != nil {
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to update user %q: %v", eu.Username, err))
+				return
+			}
+			if err := s.db.ToggleSMTPUserActive(existing.ID, eu.Active); err != nil {
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to update user %q active state: %v", eu.Username, err))
+				return
+			}
+			continue
+		}
+
+		hash, err := db.HashPassword(eu.Password)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to hash password")
+			return
+		}
+
+		var passEnc, passNonce *string
+		if s.encKey != nil {
+			enc, nonce, err := crypto.Encrypt(s.encKey, eu.Password)
+			if err == nil {
+				passEnc = &enc
+				passNonce = &nonce
+			}
+		}
+
+		if _, err := s.db.CreateSMTPUser(eu.Username, hash, passEnc, passNonce); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create user %q: %v", eu.Username, err))
+			return
+		}
+		usersCreated++
+	}
+
+	// Enable submission if SMTP users exist
+	if usersCreated > 0 {
+		count, _ := s.db.CountSMTPUsers()
+		if count > 0 {
+			s.db.SetSetting("submission_enabled", "true")
+		}
+	}
+
+	// Restore settings
+	for key, value := range payload.Settings {
+		if err := s.db.SetSetting(key, value); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to set setting %q: %v", key, err))
+			return
+		}
+	}
+
+	// Checkpoint and regenerate config
+	s.db.Checkpoint()
+	go s.regenerateConfig()
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":        "restored",
+		"domains":       len(payload.Domains),
+		"smtp_users":    len(payload.SMTPUsers),
+		"settings_keys": len(payload.Settings),
+	})
+}

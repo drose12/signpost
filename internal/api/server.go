@@ -101,9 +101,15 @@ func (s *Server) buildRouter() chi.Router {
 		// SMTP Users
 		r.Get("/api/v1/smtp-users", s.handleListSMTPUsers)
 		r.Post("/api/v1/smtp-users", s.handleCreateSMTPUser)
+		r.Get("/api/v1/smtp-users/export", s.handleExportSMTPUsers)
+		r.Post("/api/v1/smtp-users/import", s.handleImportSMTPUsers)
 		r.Delete("/api/v1/smtp-users/{id}", s.handleDeleteSMTPUser)
 		r.Put("/api/v1/smtp-users/{id}/password", s.handleUpdateSMTPUserPassword)
 		r.Put("/api/v1/smtp-users/{id}/active", s.handleToggleSMTPUserActive)
+
+		// System Backup/Restore
+		r.Get("/api/v1/backup", s.handleBackup)
+		r.Post("/api/v1/backup/restore", s.handleRestore)
 
 		// Settings
 		r.Get("/api/v1/settings", s.handleGetSettings)
