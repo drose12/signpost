@@ -816,10 +816,28 @@ func (s *Server) handleTestSend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Default: send via local SMTP (Maddy handles DKIM + relay)
+	// Use manual connection to skip TLS verification for self-signed certs on localhost
 	smtpPort := envOrDefault("SIGNPOST_SMTP_PORT", "25")
 	addr := net.JoinHostPort("127.0.0.1", smtpPort)
 
-	err := smtp.SendMail(addr, nil, req.From, []string{req.To}, []byte(msg))
+	c, dialErr := smtp.Dial(addr)
+	if dialErr != nil {
+		errStr := dialErr.Error()
+		s.db.LogMail(req.From, req.To, nil, req.Subject, "failed", nil, &errStr, false)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "failed", "error": errStr})
+		return
+	}
+	defer c.Close()
+	c.Hello("localhost")
+	if ok, _ := c.Extension("STARTTLS"); ok {
+		c.StartTLS(&tls.Config{InsecureSkipVerify: true})
+	}
+	c.Mail(req.From)
+	c.Rcpt(req.To)
+	wc, _ := c.Data()
+	wc.Write([]byte(msg))
+	err := wc.Close()
+	c.Quit()
 	if err != nil {
 		errStr := err.Error()
 		var domainID *int64
