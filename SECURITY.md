@@ -12,7 +12,7 @@
 If you discover a security vulnerability in SignPost, please report it responsibly:
 
 1. **Do NOT open a public GitHub issue** for security vulnerabilities
-2. **Email:** drose@drcs.ca with subject "SignPost Security Issue"
+2. **Email:** signpost@drcs.ca with subject "SignPost Security Issue"
 3. Include:
    - Description of the vulnerability
    - Steps to reproduce
