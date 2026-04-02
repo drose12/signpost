@@ -123,7 +123,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.4.0 — comprehensive documentation rewrite, full README with API reference
+v0.5.0 — backup/restore, security hardening, pushed to GitHub
 
 ## Deployment Process
 
