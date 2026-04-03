@@ -102,28 +102,30 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 - [ ] 3.5: Security tests
 - [x] AES-256-GCM credential encryption (internal/crypto package, 10 tests)
 
-### Phase 4 — Polish & Release (not started)
-- [ ] 4.1: Backup/restore
+### Phase 4 — Polish & Release (mostly complete)
+- [x] 4.1: Backup/restore
 - [ ] 4.2: Multi-domain support
 - [x] 4.3: Documentation (README with setup guide, DNS config, relay setup, troubleshooting, full API reference)
-- [ ] 4.4: Release automation (tag → ghcr.io → GitHub Release)
+- [x] 4.4: Release automation (tag → ghcr.io → GitHub Release)
 - [ ] 4.5: Production hardening (version pinning strategy, upgrade-test CI job, Dependabot → integration test gate)
+
+## Environments
+
+- **Dev:** Local WSL Ubuntu Docker (self-signed TLS, network trust, `docker-compose.dev.yml`)
+- **Prod:** TrueNAS Dockge (ghcr.io/drose12/signpost, `192.168.10.14` on appsnet)
 
 ## Known Issues / TODOs for Next Session
 
-1. ~~**Relay password encryption**~~ — **Done.** AES-256-GCM with HKDF-SHA256.
-2. ~~**DNS records**~~ — **Done.** DKIM/SPF/DMARC configured on Cloudflare for drcs.ca. DNS check endpoint verifies live.
-3. ~~**Relay config**~~ — **Done.** Gmail (PLAIN auth via Maddy) and ISP (LOGIN auth via Go) both working.
-4. ~~**SMTP users**~~ — **Done.** Port 587 submission with bcrypt auth working. TrueNAS verified.
-5. **Integration tests** — Phase 1.7 not started. Need Testcontainers.
-6. **Config reload race** — Rapid API calls can cause double SIGHUP. s6 handles it but could debounce.
-7. **Let's Encrypt ACME** — Phase 3.1, not started. Self-signed certs work for now.
-8. **Security audit page** — Phase 3.3, not started.
-9. **Mail log rotation** — Backlog. No way to delete/rotate logs yet.
+1. **ISP RBL block** — Home IP `206.45.58.220` blacklisted by MTS internal reputation. Direct delivery and ISP relay both fail. Using Gmail relay as workaround. May clear in 24-48h or call ISP.
+2. **Integration tests** — Phase 1.7 not started. Need Testcontainers.
+3. **Config reload race** — Rapid API calls can cause double SIGHUP. s6 handles it but could debounce.
+4. **Let's Encrypt ACME** — Phase 3.1, not started. Self-signed certs work for now.
+5. **Gmail same-domain limitation** — Gmail relay silently drops mail where sender/recipient are both @drcs.ca. TrueNAS alerts must go to drose@drcs.ca.
+6. **CodeQL** — needs manual enable in GitHub repo settings.
 
 ## Current Version
 
-v0.5.0 — backup/restore, security hardening, pushed to GitHub
+v0.6.1 — public on GitHub, GHCR image, About page, Release Notes, security hardening
 
 ## Deployment Process
 
