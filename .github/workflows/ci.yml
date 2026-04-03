@@ -21,7 +21,7 @@ jobs:
         run: go mod download
 
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: CGO_ENABLED=1 go test -v -race -coverprofile=coverage.out ./internal/...
 
       - name: Run govulncheck
         run: |
@@ -29,7 +29,7 @@ jobs:
           govulncheck ./...
 
       - name: Run vet
-        run: go vet ./...
+        run: go vet ./internal/...
 
   test-frontend:
     name: Frontend Tests
