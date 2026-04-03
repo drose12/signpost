@@ -125,7 +125,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.7.0 — hybrid same-domain direct delivery, Gmail relay fix
+v0.7.1 — security fixes, CI improvements, CodeQL enabled
 
 ## Deployment Process
 

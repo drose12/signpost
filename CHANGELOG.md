@@ -5,6 +5,13 @@ All notable changes to SignPost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-04-02
+
+### Fixed
+- Email header injection in test send handler (CRLF sanitization)
+- CI: Go tests scoped to internal packages, govulncheck made advisory
+- CodeQL security scanning enabled and all alerts resolved
+
 ## [0.7.0] - 2026-04-02
 
 ### Added
