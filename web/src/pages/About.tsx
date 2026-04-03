@@ -61,12 +61,18 @@ export function About() {
         <CardContent>
           <div className="grid grid-cols-2 gap-3 text-sm">
             {[
-              { label: 'Backend', value: 'Go' },
-              { label: 'Frontend', value: 'React + TypeScript' },
-              { label: 'Mail Server', value: 'Maddy' },
-              { label: 'Database', value: 'SQLite' },
-              { label: 'Styling', value: 'Tailwind CSS' },
-              { label: 'Components', value: 'shadcn/ui' },
+              { label: 'Backend', value: 'Go 1.24' },
+              { label: 'Frontend', value: 'React 19 + TypeScript 5.9' },
+              { label: 'Mail Server', value: 'Maddy 0.9.2' },
+              { label: 'Database', value: 'SQLite 3 (WAL mode)' },
+              { label: 'Build', value: 'Vite 8' },
+              { label: 'Styling', value: 'Tailwind CSS 4' },
+              { label: 'Components', value: 'shadcn/ui + Radix' },
+              { label: 'Icons', value: 'Lucide React' },
+              { label: 'Router', value: 'React Router 7' },
+              { label: 'LOGIN Relay', value: 'msmtp / msmtpd' },
+              { label: 'Process Mgmt', value: 's6-overlay 3.2' },
+              { label: 'Encryption', value: 'AES-256-GCM + HKDF' },
             ].map(({ label, value }) => (
               <div key={label}>
                 <span className="text-slate-500 dark:text-slate-400">{label}:</span>{' '}
@@ -124,7 +130,7 @@ export function About() {
         <CardContent>
           <div className="space-y-2 text-sm">
             <a
-              href="https://github.com/drose-drcs/signpost"
+              href="https://github.com/drose12/signpost"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-sky-600 dark:text-sky-400 hover:underline"
@@ -133,7 +139,7 @@ export function About() {
               GitHub Repository
             </a>
             <a
-              href="https://github.com/drose-drcs/signpost/blob/main/README.md"
+              href="https://github.com/drose12/signpost/blob/main/README.md"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-sky-600 dark:text-sky-400 hover:underline"
