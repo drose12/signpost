@@ -41,7 +41,7 @@ func TestOpen(t *testing.T) {
 		t.Fatalf("SchemaVersion: %v", err)
 	}
 	if version != 6 {
-		t.Errorf("expected schema version 5, got %d", version)
+		t.Errorf("expected schema version 6, got %d", version)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestOpenIdempotent(t *testing.T) {
 
 	version, _ := db2.SchemaVersion()
 	if version != 6 {
-		t.Errorf("expected schema version 5 after reopening, got %d", version)
+		t.Errorf("expected schema version 6 after reopening, got %d", version)
 	}
 }
 

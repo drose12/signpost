@@ -422,8 +422,8 @@ Maddy may not have started yet. Check the dashboard -- the Maddy status should s
 **SPF permerror**
 Usually caused by a broken `include:` pointing to a host with no SPF record. The DNS check feature detects this and suggests removal.
 
-**Gmail relay: emails to same domain bounce**
-Gmail does not relay emails destined for the same domain as the sender. If you send from `user@drcs.ca` to `other@drcs.ca` through Gmail relay, Gmail silently drops it or returns an error. Send cross-domain test emails instead.
+**Gmail relay: emails to same domain silently dropped**
+If using `smtp.gmail.com:587` as your relay, Gmail silently drops emails where both sender and recipient are on the same Google Workspace domain (e.g., `user@example.com` to `other@example.com`). This happens when the envelope sender doesn't match the authenticated relay user. **Fix:** Enable "Use relay credentials as envelope sender" in the relay config. This rewrites the MAIL FROM to match the authenticated user, which satisfies Gmail. The From header recipients see is not affected. Google Workspace paid plans can alternatively use `smtp-relay.google.com` which doesn't have this limitation.
 
 ### Checking Logs
 

@@ -60,10 +60,9 @@ target.smtp relay_{{$i}} {
 {{- end}}
 
 ## ---------------------------------------------------------------
-## Remote delivery (for direct delivery mode)
-## Only included when at least one domain uses direct delivery.
+## Remote delivery (direct delivery and same-domain bypass)
 ## ---------------------------------------------------------------
-{{- if .NeedsDirectDelivery}}
+{{- if or .NeedsDirectDelivery .HasRelayDomains}}
 
 target.remote outbound_delivery {
     mx_auth {
@@ -131,6 +130,11 @@ smtp tcp://0.0.0.0:{{.SMTPPort}} {
             }
         }
         {{- end}}
+        {{- if $d.Relay}}
+        destination {{$d.Name}} {
+            deliver_to &remote_queue
+        }
+        {{- end}}
         default_destination {
             {{- if $d.Relay}}
             deliver_to &relay_{{$i}}
@@ -175,6 +179,11 @@ submission tcp://0.0.0.0:{{.SubmissionPort}} {
                 selector {{$d.DKIMSelector}}
                 key_path {{$d.DKIMKeyPath}}
             }
+        }
+        {{- end}}
+        {{- if $d.Relay}}
+        destination {{$d.Name}} {
+            deliver_to &remote_queue
         }
         {{- end}}
         default_destination {

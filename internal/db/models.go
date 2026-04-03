@@ -27,9 +27,9 @@ type RelayConfig struct {
 	Username      *string   `json:"username,omitempty"`
 	PasswordEnc   *string   `json:"-"` // never exposed in JSON
 	PasswordNonce *string   `json:"-"`
-	StartTLS      bool      `json:"starttls"`
-	AuthMethod    string    `json:"auth_method"` // plain (default, Maddy relay) or login (Go direct relay)
-	Active        bool      `json:"active"`
+	StartTLS       bool      `json:"starttls"`
+	AuthMethod     string    `json:"auth_method"` // plain (default, Maddy relay) or login (Go direct relay)
+	Active         bool      `json:"active"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }

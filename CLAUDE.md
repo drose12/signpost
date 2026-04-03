@@ -120,7 +120,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 2. **Integration tests** — Phase 1.7 not started. Need Testcontainers.
 3. **Config reload race** — Rapid API calls can cause double SIGHUP. s6 handles it but could debounce.
 4. **Let's Encrypt ACME** — Phase 3.1, not started. Self-signed certs work for now.
-5. **Gmail same-domain limitation** — Gmail relay silently drops mail where sender/recipient are both @drcs.ca. TrueNAS alerts must go to drose@drcs.ca.
+5. **Gmail same-domain fix** — Enable "override sender" on the Gmail relay config. Gmail silently drops same-domain mail when envelope sender doesn't match auth user. The override rewrites MAIL FROM to the relay username. Legacy free Google Apps can't use `smtp-relay.google.com` (paid Workspace only).
 6. **CodeQL** — needs manual enable in GitHub repo settings.
 
 ## Current Version
@@ -147,7 +147,7 @@ Only commit code when changes are ready. Do not rebuild the container on every f
 3. Run `cd web && npx vitest run` to verify frontend tests (5 tests)
 6. **Phase 2 Web UI is complete.** Next priorities:
    - Configure DNS records on Cloudflare for drcs.ca (DKIM/SPF/DMARC)
-   - Configure Gmail relay (app password) for production mail delivery
+   - Configure Gmail relay (app password, override sender enabled) for production mail delivery
    - Phase 1.7: Integration tests (Testcontainers)
    - Phase 3: TLS & Security
    - Push to GitHub when ready

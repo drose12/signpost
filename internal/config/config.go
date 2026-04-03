@@ -50,14 +50,14 @@ type DomainData struct {
 
 // RelayData holds relay config for a domain.
 type RelayData struct {
-	Method     string
-	Host       string
-	Port       int
-	Username   string
-	Password   string
-	StartTLS   bool
-	AuthMethod string // "plain" or "login"
-	MsmtpProxy bool   // true = relay through local msmtpd instead of direct to host
+	Method         string
+	Host           string
+	Port           int
+	Username       string
+	Password       string
+	StartTLS       bool
+	AuthMethod     string // "plain" or "login"
+	MsmtpProxy     bool   // true = relay through local msmtpd instead of direct to host
 }
 
 // Generator creates Maddy configuration files from database state.
@@ -285,10 +285,10 @@ func (g *Generator) buildTemplateData(database *db.DB, decryptPassword func(enc,
 		}
 		if rc != nil && rc.Method != "direct" {
 			rd := &RelayData{
-				Method:     rc.Method,
-				Port:       rc.Port,
-				StartTLS:   rc.StartTLS,
-				AuthMethod: rc.AuthMethod,
+				Method:         rc.Method,
+				Port:           rc.Port,
+				StartTLS:       rc.StartTLS,
+				AuthMethod:     rc.AuthMethod,
 			}
 			if rc.Host != nil {
 				rd.Host = *rc.Host

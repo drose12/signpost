@@ -423,17 +423,17 @@ func (s *Server) handleGetAllRelayConfigs(w http.ResponseWriter, r *http.Request
 // including decrypted password.
 func (s *Server) relayConfigResponse(rc *db.RelayConfig) map[string]interface{} {
 	resp := map[string]interface{}{
-		"id":          rc.ID,
-		"domain_id":   rc.DomainID,
-		"method":      rc.Method,
-		"host":        rc.Host,
-		"port":        rc.Port,
-		"username":    rc.Username,
-		"starttls":    rc.StartTLS,
-		"auth_method": rc.AuthMethod,
-		"active":      rc.Active,
-		"created_at":  rc.CreatedAt,
-		"updated_at":  rc.UpdatedAt,
+		"id":              rc.ID,
+		"domain_id":       rc.DomainID,
+		"method":          rc.Method,
+		"host":            rc.Host,
+		"port":            rc.Port,
+		"username":        rc.Username,
+		"starttls":        rc.StartTLS,
+		"auth_method":     rc.AuthMethod,
+		"active":          rc.Active,
+		"created_at":      rc.CreatedAt,
+		"updated_at":      rc.UpdatedAt,
 	}
 	if rc.PasswordEnc != nil && rc.PasswordNonce != nil {
 		pw, err := s.decryptRelayPassword(*rc.PasswordEnc, *rc.PasswordNonce)
@@ -455,13 +455,13 @@ func (s *Server) handleUpdateRelay(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Method   string  `json:"method"`
-		Host     *string `json:"host"`
-		Port     int     `json:"port"`
-		Username *string `json:"username"`
-		Password *string `json:"password"`
-		StartTLS bool    `json:"starttls"`
-		Active   *bool   `json:"active"` // nil = true for backwards compat
+		Method         string  `json:"method"`
+		Host           *string `json:"host"`
+		Port           int     `json:"port"`
+		Username       *string `json:"username"`
+		Password       *string `json:"password"`
+		StartTLS       bool    `json:"starttls"`
+		Active         *bool   `json:"active"`          // nil = true for backwards compat
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -1170,14 +1170,14 @@ type domainExportDomain struct {
 }
 
 type relayExportConfig struct {
-	Method     string  `json:"method"`
-	Host       *string `json:"host,omitempty"`
-	Port       int     `json:"port"`
-	Username   *string `json:"username,omitempty"`
-	Password   string  `json:"password,omitempty"`
-	StartTLS   bool    `json:"starttls"`
-	AuthMethod string  `json:"auth_method,omitempty"`
-	Active     bool    `json:"active"`
+	Method         string  `json:"method"`
+	Host           *string `json:"host,omitempty"`
+	Port           int     `json:"port"`
+	Username       *string `json:"username,omitempty"`
+	Password       string  `json:"password,omitempty"`
+	StartTLS       bool    `json:"starttls"`
+	AuthMethod     string  `json:"auth_method,omitempty"`
+	Active         bool    `json:"active"`
 }
 
 // handleExportDomainConfig exports a domain's entire configuration as a JSON file download.
@@ -1224,14 +1224,14 @@ func (s *Server) handleExportDomainConfig(w http.ResponseWriter, r *http.Request
 			}
 		}
 		exportRelays = append(exportRelays, relayExportConfig{
-			Method:     rc.Method,
-			Host:       rc.Host,
-			Port:       rc.Port,
-			Username:   rc.Username,
-			Password:   password,
-			StartTLS:   rc.StartTLS,
-			AuthMethod: rc.AuthMethod,
-			Active:     rc.Active,
+			Method:         rc.Method,
+			Host:           rc.Host,
+			Port:           rc.Port,
+			Username:       rc.Username,
+			Password:       password,
+			StartTLS:       rc.StartTLS,
+			AuthMethod:     rc.AuthMethod,
+			Active:         rc.Active,
 		})
 	}
 

@@ -139,4 +139,5 @@ var migrations = []string{
 
 	DROP TABLE relay_configs;
 	ALTER TABLE relay_configs_new RENAME TO relay_configs;`,
+
 }
