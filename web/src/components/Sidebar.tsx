@@ -29,11 +29,19 @@ export function Sidebar() {
 
   return (
     <aside className="w-[200px] min-h-screen bg-slate-900 flex flex-col shrink-0">
-      {/* Logo + version */}
+      {/* Logo + version + theme toggle */}
       <div className="px-4 py-5">
-        <div className="flex items-center gap-2">
-          <Mail className="text-sky-400 w-5 h-5" />
-          <span className="text-sky-400 font-semibold text-lg">SignPost</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Mail className="text-sky-400 w-5 h-5" />
+            <span className="text-sky-400 font-semibold text-lg">SignPost</span>
+          </div>
+          <button
+            onClick={toggleTheme}
+            className="text-slate-500 hover:text-white transition-colors"
+          >
+            {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+          </button>
         </div>
         {version && (
           <Link to="/release-notes" className="text-xs text-slate-500 hover:text-sky-400 mt-1 pl-7 block transition-colors">
@@ -65,8 +73,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* About + Theme toggle */}
-      <div className="px-4 py-4 border-t border-slate-700 space-y-3">
+      {/* About */}
+      <div className="px-4 py-4 border-t border-slate-700">
         <NavLink
           to="/about"
           className={({ isActive }) =>
@@ -78,13 +86,6 @@ export function Sidebar() {
           <Info className="w-4 h-4" />
           About
         </NavLink>
-        <button
-          onClick={toggleTheme}
-          className="flex items-center gap-2 text-slate-400 hover:text-white text-sm"
-        >
-          {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-          {theme === 'light' ? 'Dark mode' : 'Light mode'}
-        </button>
       </div>
     </aside>
   );
