@@ -5,6 +5,14 @@ All notable changes to SignPost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-02
+
+### Added
+- Hybrid same-domain routing: when using a relay (e.g., Gmail), mail to the same domain is delivered directly via MX while cross-domain mail goes through the relay. Fixes Gmail silently dropping same-domain mail and catchall addresses not working through Gmail relay.
+
+### Fixed
+- Updated Gmail relay troubleshooting docs with root cause and workaround
+
 ## [0.6.1] - 2026-04-02
 
 ### Fixed
