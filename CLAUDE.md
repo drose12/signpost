@@ -10,7 +10,7 @@ A Docker-based local SMTP relay that DKIM-signs outgoing mail and relays through
 - **Container:** Single Docker container with s6-overlay managing Maddy + Go web app
 - **Owner:** drose, domain drcs.ca on Cloudflare DNS, Gmail-hosted email
 - **Prod server:** root@ubuntu01.drcs.ca
-- **Repo:** github.com/drose12/signpost (private)
+- **Repo:** github.com/drose12/signpost (public)
 
 ## Key Files
 
@@ -116,12 +116,10 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Known Issues / TODOs for Next Session
 
-1. **ISP RBL block** — Home IP `206.45.58.220` blacklisted by MTS internal reputation. Direct delivery and ISP relay both fail. Using Gmail relay as workaround. May clear in 24-48h or call ISP.
+1. **ISP RBL block** — Home IP `206.45.58.220` was blacklisted by MTS. Direct delivery works again as of v0.7.0 testing. May recur with high SMTP volume.
 2. **Integration tests** — Phase 1.7 not started. Need Testcontainers.
 3. **Config reload race** — Rapid API calls can cause double SIGHUP. s6 handles it but could debounce.
 4. **Let's Encrypt ACME** — Phase 3.1, not started. Self-signed certs work for now.
-5. **Gmail same-domain** — Fixed in v0.7.0. Same-domain mail now goes direct via MX (catchall works), cross-domain goes through Gmail relay. No config needed — automatic when relay is active.
-6. **CodeQL** — needs manual enable in GitHub repo settings.
 
 ## Current Version
 
@@ -146,8 +144,5 @@ Only commit code when changes are ready. Do not rebuild the container on every f
 2. Run `CGO_ENABLED=1 go test -race ./internal/...` to verify Go tests (100+ tests across 6 packages)
 3. Run `cd web && npx vitest run` to verify frontend tests (5 tests)
 6. **Phase 2 Web UI is complete.** Next priorities:
-   - Configure DNS records on Cloudflare for drcs.ca (DKIM/SPF/DMARC)
-   - Configure Gmail relay (app password, override sender enabled) for production mail delivery
    - Phase 1.7: Integration tests (Testcontainers)
-   - Phase 3: TLS & Security
-   - Push to GitHub when ready
+   - Phase 3: TLS & Security (ACME, security audit page)
