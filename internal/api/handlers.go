@@ -814,6 +814,16 @@ func (s *Server) handleTestSend(w http.ResponseWriter, r *http.Request) {
 		req.Body = "This is a test email from SignPost.\nIf you received this, your mail relay is working correctly."
 	}
 
+	// Sanitize header values to prevent email header injection (CRLF injection)
+	sanitizeHeader := func(s string) string {
+		s = strings.ReplaceAll(s, "\r", "")
+		s = strings.ReplaceAll(s, "\n", "")
+		return s
+	}
+	req.From = sanitizeHeader(req.From)
+	req.To = sanitizeHeader(req.To)
+	req.Subject = sanitizeHeader(req.Subject)
+
 	// Build the raw message
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s@signpost>\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
 		req.From, req.To, req.Subject,
@@ -860,7 +870,7 @@ func (s *Server) handleTestSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ok, _ := c.Extension("STARTTLS"); ok {
-		c.StartTLS(&tls.Config{InsecureSkipVerify: true})
+		c.StartTLS(&tls.Config{InsecureSkipVerify: true}) //nolint:gosec // loopback to local Maddy with self-signed cert
 	}
 	if err := c.Mail(req.From); err != nil {
 		errStr := err.Error()
