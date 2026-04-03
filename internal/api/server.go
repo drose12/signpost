@@ -72,6 +72,9 @@ func (s *Server) buildRouter() chi.Router {
 	// Health check — no auth required
 	r.Get("/api/v1/healthz", s.handleHealthz)
 
+	// Changelog — no auth required (public info)
+	r.Get("/api/v1/changelog", s.handleChangelog)
+
 	// All other API routes require basic auth
 	r.Group(func(r chi.Router) {
 		r.Use(s.basicAuth)

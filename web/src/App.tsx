@@ -9,6 +9,8 @@ import { Domains } from './pages/Domains';
 import { MailLog } from './pages/MailLog';
 import { Wizard } from './pages/Wizard';
 import { SMTPUsers } from './pages/SMTPUsers';
+import { ReleaseNotes } from './pages/ReleaseNotes';
+import { About } from './pages/About';
 import { hasCredentials } from './api';
 import { initTheme } from './theme';
 
@@ -31,6 +33,8 @@ export default function App() {
           <Route path="/logs" element={<MailLog />} />
           <Route path="/smtp-users" element={<SMTPUsers />} />
           <Route path="/wizard" element={<Wizard />} />
+          <Route path="/release-notes" element={<ReleaseNotes />} />
+          <Route path="/about" element={<About />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

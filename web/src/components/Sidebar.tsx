@@ -1,5 +1,5 @@
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Globe, Mail, Users, Wand2, Sun, Moon } from 'lucide-react';
+import { NavLink, Link } from 'react-router-dom';
+import { LayoutDashboard, Globe, Mail, Users, Wand2, Sun, Moon, Info } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { StatusResponse } from '../types';
@@ -35,7 +35,11 @@ export function Sidebar() {
           <Mail className="text-sky-400 w-5 h-5" />
           <span className="text-sky-400 font-semibold text-lg">SignPost</span>
         </div>
-        {version && <p className="text-xs text-slate-500 mt-1 pl-7">{version}</p>}
+        {version && (
+          <Link to="/release-notes" className="text-xs text-slate-500 hover:text-sky-400 mt-1 pl-7 block transition-colors">
+            {version}
+          </Link>
+        )}
       </div>
 
       <div className="border-b border-slate-700 mx-4" />
@@ -61,8 +65,19 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Theme toggle */}
-      <div className="px-4 py-4 border-t border-slate-700">
+      {/* About + Theme toggle */}
+      <div className="px-4 py-4 border-t border-slate-700 space-y-3">
+        <NavLink
+          to="/about"
+          className={({ isActive }) =>
+            `flex items-center gap-2 text-sm transition-colors ${
+              isActive ? 'text-white' : 'text-slate-400 hover:text-white'
+            }`
+          }
+        >
+          <Info className="w-4 h-4" />
+          About
+        </NavLink>
         <button
           onClick={toggleTheme}
           className="flex items-center gap-2 text-slate-400 hover:text-white text-sm"

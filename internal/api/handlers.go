@@ -36,6 +36,20 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleChangelog returns the raw CHANGELOG.md content.
+func (s *Server) handleChangelog(w http.ResponseWriter, r *http.Request) {
+	content, err := os.ReadFile("/app/CHANGELOG.md")
+	// fallback to local path for development
+	if err != nil {
+		content, err = os.ReadFile("CHANGELOG.md")
+	}
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]string{"content": "No changelog available."})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"content": string(content)})
+}
+
 // handleStatus returns dashboard data.
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	domains, err := s.db.ListDomains()

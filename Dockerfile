@@ -43,9 +43,10 @@ RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
 # Install runtime dependencies
 RUN apk add --no-cache curl sqlite-libs openssl msmtp
 
-# Copy SignPost binary and templates
+# Copy SignPost binary, templates, and changelog
 COPY --from=builder /build/signpost /app/signpost
 COPY templates/ /app/templates/
+COPY CHANGELOG.md /app/CHANGELOG.md
 
 # Copy s6 service definitions
 COPY rootfs/ /
@@ -64,9 +65,9 @@ ENV SIGNPOST_DATA_DIR=/data/signpost \
 # Expose ports
 EXPOSE 25 587 8080
 
-# Health check
+# Health check — verifies both HTTP API and SMTP port
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/v1/healthz || exit 1
+    CMD curl -f http://localhost:8080/api/v1/healthz && echo QUIT | nc -w 2 localhost 25 || exit 1
 
 # s6-overlay entrypoint
 ENTRYPOINT ["/init"]
