@@ -5,6 +5,13 @@ All notable changes to SignPost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-04
+
+### Added
+- Login page background image with Ken Burns slow zoom animation
+- README screenshot for GitHub discoverability
+- Repository topics and description for search visibility
+
 ## [0.7.1] - 2026-04-02
 
 ### Fixed

@@ -12,7 +12,7 @@ SignPost sits between your local services (NAS, home automation, monitoring, Pro
 - **Credential Encryption** -- AES-256-GCM at rest for relay passwords
 - **Single Container** -- Maddy + Go API + React UI, managed by s6-overlay
 
-<!-- Screenshot placeholder: add web UI screenshot here -->
+![SignPost Login](docs/images/screenshot.png)
 
 ## Quick Start
 
