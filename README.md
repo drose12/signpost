@@ -2,7 +2,7 @@
 
 **A Docker-based SMTP relay that DKIM-signs outgoing emails, relays through your preferred smarthost, and guides you through DNS configuration.**
 
-SignPost sits between your local services (NAS, home automation, monitoring) and the internet, ensuring every outgoing email passes SPF, DKIM, and DMARC checks.
+SignPost sits between your local services (NAS, home automation, monitoring, Proxmox, TrueNAS, Synology, Unraid) and the internet, ensuring every outgoing email passes SPF, DKIM, and DMARC checks. No more emails landing in spam.
 
 - **Web Admin UI** -- Dashboard, domain management, DNS validation, setup wizard
 - **DKIM Signing** -- Per-domain RSA-2048 keys, one-click generation
