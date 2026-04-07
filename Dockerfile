@@ -52,7 +52,7 @@ COPY CHANGELOG.md /app/CHANGELOG.md
 COPY rootfs/ /
 
 # Create data directory
-RUN mkdir -p /data/signpost/dkim_keys /data/signpost/tls /data/signpost/logs /data/signpost/backups
+RUN mkdir -p /data/signpost/dkim_keys /data/signpost/tls /data/signpost/logs /data/signpost/logs/maddy /data/signpost/backups
 
 # Environment defaults
 ENV SIGNPOST_DATA_DIR=/data/signpost \
