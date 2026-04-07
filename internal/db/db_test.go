@@ -467,3 +467,98 @@ func TestMailLog(t *testing.T) {
 		t.Errorf("expected 0 pruned, got %d", pruned)
 	}
 }
+
+func TestLogMailEvent(t *testing.T) {
+	db := testDB(t)
+
+	// Insert new event
+	err := db.LogMailEvent("abc123", "csb@drcs.ca", "d@drcs.ca", "accepted", nil, nil, "172.21.0.1", "587", false)
+	if err != nil {
+		t.Fatalf("LogMailEvent insert: %v", err)
+	}
+
+	// Verify it was created
+	entries, _ := db.ListMailLog(MailLogFilter{Limit: 10})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].MsgID == nil || *entries[0].MsgID != "abc123" {
+		t.Error("expected msg_id abc123")
+	}
+	if entries[0].Status != "accepted" {
+		t.Errorf("expected status accepted, got %s", entries[0].Status)
+	}
+	if entries[0].Direction != "outbound" {
+		t.Errorf("expected direction outbound, got %s", entries[0].Direction)
+	}
+
+	// Update existing event (delivery) — from_addr should NOT be overwritten by empty string
+	relayHost := "smtp.gmail.com"
+	err = db.LogMailEvent("abc123", "", "d@drcs.ca", "sent", &relayHost, nil, "", "", true)
+	if err != nil {
+		t.Fatalf("LogMailEvent update: %v", err)
+	}
+
+	entries, _ = db.ListMailLog(MailLogFilter{Limit: 10})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry after update, got %d", len(entries))
+	}
+	if entries[0].Status != "sent" {
+		t.Errorf("expected status sent after update, got %s", entries[0].Status)
+	}
+	if entries[0].FromAddr != "csb@drcs.ca" {
+		t.Errorf("from_addr should be preserved, got %s", entries[0].FromAddr)
+	}
+	if entries[0].RelayHost == nil || *entries[0].RelayHost != "smtp.gmail.com" {
+		t.Error("expected relay_host smtp.gmail.com")
+	}
+	if !entries[0].DKIMSigned {
+		t.Error("expected dkim_signed true after update")
+	}
+}
+
+func TestLogMailEventAttemptCount(t *testing.T) {
+	db := testDB(t)
+
+	db.LogMailEvent("retry1", "a@drcs.ca", "b@example.com", "accepted", nil, nil, "1.2.3.4", "25", false)
+
+	errMsg := "connection refused"
+	db.LogMailEvent("retry1", "", "", "deferred", nil, &errMsg, "", "", false)
+	db.LogMailEvent("retry1", "", "", "deferred", nil, &errMsg, "", "", false)
+
+	entries, _ := db.ListMailLog(MailLogFilter{Limit: 10})
+	if entries[0].AttemptCount != 2 {
+		t.Errorf("expected attempt_count 2, got %d", entries[0].AttemptCount)
+	}
+}
+
+func TestListMailLogSearch(t *testing.T) {
+	db := testDB(t)
+
+	db.LogMailEvent("msg1", "alice@drcs.ca", "bob@example.com", "sent", nil, nil, "", "", false)
+	db.LogMailEvent("msg2", "csb@drcs.ca", "d@drcs.ca", "failed", nil, nil, "", "", false)
+
+	search := "alice"
+	entries, _ := db.ListMailLog(MailLogFilter{Search: &search, Limit: 10})
+	if len(entries) != 1 {
+		t.Errorf("expected 1 result for search 'alice', got %d", len(entries))
+	}
+
+	search2 := "msg2"
+	entries2, _ := db.ListMailLog(MailLogFilter{Search: &search2, Limit: 10})
+	if len(entries2) != 1 {
+		t.Errorf("expected 1 result for search 'msg2', got %d", len(entries2))
+	}
+}
+
+func TestListMailLogDateFilter(t *testing.T) {
+	db := testDB(t)
+
+	db.LogMailEvent("old1", "a@drcs.ca", "b@example.com", "sent", nil, nil, "", "", false)
+
+	fromDate := "2099-01-01"
+	entries, _ := db.ListMailLog(MailLogFilter{FromDate: &fromDate, Limit: 10})
+	if len(entries) != 0 {
+		t.Errorf("expected 0 results for future date filter, got %d", len(entries))
+	}
+}

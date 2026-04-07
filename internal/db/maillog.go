@@ -16,10 +16,35 @@ func (db *DB) LogMail(fromAddr, toAddr string, domainID *int64, subject, status 
 	return nil
 }
 
+// LogMailEvent creates or updates a mail log entry based on msg_id.
+// Used by the Maddy log tailer for real-time event capture.
+func (db *DB) LogMailEvent(msgID, fromAddr, toAddr, status string, relayHost, sendErr *string, sourceIP, sourcePort string, dkimSigned bool) error {
+	_, err := db.Exec(`INSERT INTO mail_log (msg_id, from_addr, to_addr, status, relay_host, error, source_ip, source_port, dkim_signed, direction)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'outbound')
+		ON CONFLICT(msg_id) DO UPDATE SET
+			from_addr = COALESCE(NULLIF(excluded.from_addr, ''), from_addr),
+			to_addr = COALESCE(NULLIF(excluded.to_addr, ''), to_addr),
+			status = excluded.status,
+			relay_host = COALESCE(excluded.relay_host, relay_host),
+			error = COALESCE(excluded.error, error),
+			source_ip = COALESCE(NULLIF(excluded.source_ip, ''), source_ip),
+			source_port = COALESCE(NULLIF(excluded.source_port, ''), source_port),
+			dkim_signed = CASE WHEN excluded.dkim_signed THEN 1 ELSE dkim_signed END,
+			attempt_count = attempt_count + CASE WHEN excluded.status IN ('deferred','failed') THEN 1 ELSE 0 END`,
+		msgID, fromAddr, toAddr, status, relayHost, sendErr, sourceIP, sourcePort, dkimSigned)
+	if err != nil {
+		return fmt.Errorf("logging mail event: %w", err)
+	}
+	return nil
+}
+
 // MailLogFilter holds filtering options for mail log queries.
 type MailLogFilter struct {
 	Status   *string
 	DomainID *int64
+	Search   *string // LIKE search across from_addr, to_addr, msg_id, error
+	FromDate *string // ISO 8601 start date
+	ToDate   *string // ISO 8601 end date
 	Limit    int
 	Offset   int
 }
@@ -27,7 +52,8 @@ type MailLogFilter struct {
 // ListMailLog returns mail log entries matching the filter.
 func (db *DB) ListMailLog(filter MailLogFilter) ([]MailLogEntry, error) {
 	query := `SELECT id, timestamp, from_addr, to_addr, domain_id, subject, status,
-		relay_host, error, dkim_signed FROM mail_log WHERE 1=1`
+		relay_host, error, dkim_signed, msg_id, source_ip, source_port, attempt_count, direction
+		FROM mail_log WHERE 1=1`
 	var args []interface{}
 
 	if filter.Status != nil {
@@ -37,6 +63,19 @@ func (db *DB) ListMailLog(filter MailLogFilter) ([]MailLogEntry, error) {
 	if filter.DomainID != nil {
 		query += ` AND domain_id = ?`
 		args = append(args, *filter.DomainID)
+	}
+	if filter.Search != nil {
+		query += ` AND (from_addr LIKE ? OR to_addr LIKE ? OR msg_id LIKE ? OR error LIKE ?)`
+		wildcard := "%" + *filter.Search + "%"
+		args = append(args, wildcard, wildcard, wildcard, wildcard)
+	}
+	if filter.FromDate != nil {
+		query += ` AND timestamp >= ?`
+		args = append(args, *filter.FromDate)
+	}
+	if filter.ToDate != nil {
+		query += ` AND timestamp <= ?`
+		args = append(args, *filter.ToDate)
 	}
 
 	query += ` ORDER BY timestamp DESC`
@@ -62,7 +101,8 @@ func (db *DB) ListMailLog(filter MailLogFilter) ([]MailLogEntry, error) {
 	for rows.Next() {
 		var e MailLogEntry
 		if err := rows.Scan(&e.ID, &e.Timestamp, &e.FromAddr, &e.ToAddr, &e.DomainID,
-			&e.Subject, &e.Status, &e.RelayHost, &e.Error, &e.DKIMSigned); err != nil {
+			&e.Subject, &e.Status, &e.RelayHost, &e.Error, &e.DKIMSigned,
+			&e.MsgID, &e.SourceIP, &e.SourcePort, &e.AttemptCount, &e.Direction); err != nil {
 			return nil, fmt.Errorf("scanning mail log entry: %w", err)
 		}
 		entries = append(entries, e)

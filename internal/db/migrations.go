@@ -146,5 +146,5 @@ var migrations = []string{
  ALTER TABLE mail_log ADD COLUMN source_port TEXT;
  ALTER TABLE mail_log ADD COLUMN attempt_count INTEGER DEFAULT 0;
  ALTER TABLE mail_log ADD COLUMN direction TEXT DEFAULT 'outbound';
- CREATE UNIQUE INDEX idx_mail_log_msg_id ON mail_log(msg_id) WHERE msg_id IS NOT NULL;`,
+ CREATE UNIQUE INDEX idx_mail_log_msg_id ON mail_log(msg_id);`,
 }
