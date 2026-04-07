@@ -323,9 +323,9 @@ func TestRealTemplateWithRelay(t *testing.T) {
 		t.Fatalf("Generate: %v", err)
 	}
 
-	// Should have relay target
-	if !strings.Contains(content, "target.smtp relay_0") {
-		t.Errorf("expected relay target definition, got:\n%s", content)
+	// Should have relay SMTP target (renamed to relay_target_0)
+	if !strings.Contains(content, "target.smtp relay_target_0") {
+		t.Errorf("expected relay SMTP target definition, got:\n%s", content)
 	}
 	if !strings.Contains(content, "targets tcp://smtp.gmail.com:587") {
 		t.Error("expected relay targets directive")
@@ -336,7 +336,11 @@ func TestRealTemplateWithRelay(t *testing.T) {
 	if !strings.Contains(content, `auth plain "user@drcs.ca" "decrypted-encpass"`) {
 		t.Error("expected auth credentials in relay config")
 	}
-	// Pipeline should deliver to relay and have inline DKIM
+	// Should have queue wrapper around relay target
+	if !strings.Contains(content, "target.queue relay_0") {
+		t.Errorf("expected relay queue wrapper, got:\n%s", content)
+	}
+	// Pipeline should deliver to relay queue and have inline DKIM
 	if !strings.Contains(content, "deliver_to &relay_0") {
 		t.Error("expected deliver_to relay reference in pipeline")
 	}
