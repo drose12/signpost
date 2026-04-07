@@ -329,7 +329,7 @@ func TestStatus(t *testing.T) {
 
 	var resp map[string]interface{}
 	json.Unmarshal(rr.Body.Bytes(), &resp)
-	if resp["schema_version"].(float64) != 6 {
+	if resp["schema_version"].(float64) != 7 {
 		t.Errorf("unexpected schema version: %v", resp["schema_version"])
 	}
 	// maddy_status should be present; value depends on whether port 25 is in use

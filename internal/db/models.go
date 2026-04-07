@@ -68,5 +68,10 @@ type MailLogEntry struct {
 	Status     string    `json:"status"` // sent, failed, deferred
 	RelayHost  *string   `json:"relay_host,omitempty"`
 	Error      *string   `json:"error,omitempty"`
-	DKIMSigned bool      `json:"dkim_signed"`
+	DKIMSigned   bool      `json:"dkim_signed"`
+	MsgID        *string   `json:"msg_id,omitempty"`
+	SourceIP     *string   `json:"source_ip,omitempty"`
+	SourcePort   *string   `json:"source_port,omitempty"`
+	AttemptCount int       `json:"attempt_count"`
+	Direction    string    `json:"direction"`
 }

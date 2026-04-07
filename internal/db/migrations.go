@@ -140,4 +140,11 @@ var migrations = []string{
 	DROP TABLE relay_configs;
 	ALTER TABLE relay_configs_new RENAME TO relay_configs;`,
 
+	// Migration 7: Add fields for Maddy log tailer and enhanced mail tracking.
+	`ALTER TABLE mail_log ADD COLUMN msg_id TEXT;
+ ALTER TABLE mail_log ADD COLUMN source_ip TEXT;
+ ALTER TABLE mail_log ADD COLUMN source_port TEXT;
+ ALTER TABLE mail_log ADD COLUMN attempt_count INTEGER DEFAULT 0;
+ ALTER TABLE mail_log ADD COLUMN direction TEXT DEFAULT 'outbound';
+ CREATE UNIQUE INDEX idx_mail_log_msg_id ON mail_log(msg_id) WHERE msg_id IS NOT NULL;`,
 }
