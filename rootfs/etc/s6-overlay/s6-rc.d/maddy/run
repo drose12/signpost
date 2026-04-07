@@ -1,3 +1,4 @@
 #!/command/with-contenv sh
+mkdir -p /data/signpost/logs/maddy
 sleep 3
-exec /bin/maddy -config /data/signpost/maddy.conf run 2>&1
+exec /bin/maddy -config /data/signpost/maddy.conf run 2>&1 | s6-log -b -- n10 s1000000 /data/signpost/logs/maddy/

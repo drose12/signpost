@@ -140,11 +140,37 @@ var migrations = []string{
 	DROP TABLE relay_configs;
 	ALTER TABLE relay_configs_new RENAME TO relay_configs;`,
 
-	// Migration 7: Add fields for Maddy log tailer and enhanced mail tracking.
-	`ALTER TABLE mail_log ADD COLUMN msg_id TEXT;
- ALTER TABLE mail_log ADD COLUMN source_ip TEXT;
- ALTER TABLE mail_log ADD COLUMN source_port TEXT;
- ALTER TABLE mail_log ADD COLUMN attempt_count INTEGER DEFAULT 0;
- ALTER TABLE mail_log ADD COLUMN direction TEXT DEFAULT 'outbound';
- CREATE UNIQUE INDEX idx_mail_log_msg_id ON mail_log(msg_id);`,
+	// Migration 7: schema version bump (columns added in migration 8).
+	// Originally attempted multi-statement ALTER TABLEs here, but go-sqlite3
+	// silently ignores all but the first statement. Replaced with no-op;
+	// the real work happens in migration 8.
+	`SELECT 1;`,
+
+	// Migration 8: Add fields for Maddy log tailer and enhanced mail tracking.
+	// Each ALTER TABLE must be a separate Exec call, so we use a table rebuild approach.
+	`CREATE TABLE mail_log_new (
+		id            INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		from_addr     TEXT NOT NULL,
+		to_addr       TEXT NOT NULL,
+		domain_id     INTEGER REFERENCES domains(id),
+		subject       TEXT,
+		status        TEXT NOT NULL,
+		relay_host    TEXT,
+		error         TEXT,
+		dkim_signed   BOOLEAN DEFAULT 0,
+		msg_id        TEXT,
+		source_ip     TEXT,
+		source_port   TEXT,
+		attempt_count INTEGER DEFAULT 0,
+		direction     TEXT DEFAULT 'outbound'
+	);
+	INSERT INTO mail_log_new (id, timestamp, from_addr, to_addr, domain_id, subject, status, relay_host, error, dkim_signed)
+		SELECT id, timestamp, from_addr, to_addr, domain_id, subject, status, relay_host, error, dkim_signed FROM mail_log;
+	DROP TABLE mail_log;
+	ALTER TABLE mail_log_new RENAME TO mail_log;
+	CREATE INDEX idx_mail_log_timestamp ON mail_log(timestamp);
+	CREATE INDEX idx_mail_log_status ON mail_log(status);
+	CREATE INDEX idx_mail_log_domain_id ON mail_log(domain_id);
+	CREATE UNIQUE INDEX idx_mail_log_msg_id ON mail_log(msg_id);`,
 }
