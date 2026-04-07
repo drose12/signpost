@@ -1,15 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/drose-drcs/signpost/internal/api"
 	"github.com/drose-drcs/signpost/internal/config"
 	"github.com/drose-drcs/signpost/internal/crypto"
 	"github.com/drose-drcs/signpost/internal/db"
+	"github.com/drose-drcs/signpost/internal/logtail"
+	"github.com/drose-drcs/signpost/internal/queue"
 	selfsigned "github.com/drose-drcs/signpost/internal/tls"
 	"github.com/drose-drcs/signpost/web"
 )
@@ -98,10 +102,25 @@ func main() {
 		log.Fatal("SIGNPOST_ADMIN_PASS environment variable is required")
 	}
 
+	// Start Maddy log tailer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logPath := filepath.Join(dataDir, "logs", "maddy", "current")
+	tailer := logtail.NewTailer(logPath, database)
+	go tailer.Run(ctx)
+	log.Printf("Log tailer started, watching %s", logPath)
+
+	// Start queue scanner
+	stateDir := filepath.Join(dataDir, "maddy_state")
+	queueScanner := queue.NewScanner(stateDir)
+	go queueScanner.Run(ctx)
+	log.Println("Queue scanner started")
+
 	// Start API server
 	webPort := envOrDefault("SIGNPOST_WEB_PORT", "8080")
 	hostname := "mail." + envOrDefault("SIGNPOST_DOMAIN", "localhost")
-	srv := api.NewServer(database, configGen, keysDir, adminUser, adminPass, secretKey, dataDir, hostname, version, nil, web.DistFS)
+	srv := api.NewServer(database, configGen, keysDir, adminUser, adminPass, secretKey, dataDir, hostname, version, queueScanner, web.DistFS)
 
 	log.Printf("Starting web server on :%s", webPort)
 	if err := http.ListenAndServe(":"+webPort, srv.Handler()); err != nil {
