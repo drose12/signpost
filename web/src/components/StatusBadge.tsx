@@ -18,8 +18,14 @@ export function StatusBadge({ status }: StatusBadgeProps) {
     case 'inactive':
       colorClass = 'text-red-500 dark:text-red-400';
       break;
+    case 'accepted':
+      colorClass = 'text-blue-500 dark:text-blue-400';
+      break;
     case 'deferred':
       colorClass = 'text-amber-500 dark:text-amber-400';
+      break;
+    case 'rejected':
+      colorClass = 'text-red-400 dark:text-red-300';
       break;
     default:
       colorClass = 'text-slate-500 dark:text-slate-400';
