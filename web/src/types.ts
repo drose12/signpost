@@ -44,6 +44,11 @@ export interface MailLogEntry {
   relay_host?: string;
   error?: string;
   dkim_signed: boolean;
+  msg_id?: string;
+  source_ip?: string;
+  source_port?: string;
+  attempt_count: number;
+  direction: string;
 }
 
 export interface DNSRecord {
@@ -110,4 +115,25 @@ export interface SMTPUser {
   active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface QueueRecipient {
+  address: string;
+  attempts: number;
+  last_attempt?: string;
+  last_error?: string;
+  status: string;
+}
+
+export interface QueueItem {
+  msg_id: string;
+  from: string;
+  recipients: QueueRecipient[];
+  queued_at: string;
+  queue_name: string;
+}
+
+export interface QueueResponse {
+  items: QueueItem[];
+  count: number;
 }
