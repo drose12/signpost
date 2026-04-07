@@ -10,6 +10,7 @@ import (
 
 	"github.com/drose-drcs/signpost/internal/config"
 	"github.com/drose-drcs/signpost/internal/db"
+	"github.com/drose-drcs/signpost/internal/queue"
 )
 
 func testServer(t *testing.T) (*Server, *db.DB) {
@@ -30,7 +31,7 @@ func testServer(t *testing.T) (*Server, *db.DB) {
 	)
 
 	keysDir := filepath.Join(dir, "dkim_keys")
-	srv := NewServer(database, gen, keysDir, "admin", "testpass", "test-secret-key-minimum-32-characters-long", t.TempDir(), "mail.test.local", "test", nil)
+	srv := NewServer(database, gen, keysDir, "admin", "testpass", "test-secret-key-minimum-32-characters-long", t.TempDir(), "mail.test.local", "test", queue.NewScanner(t.TempDir()), nil)
 	return srv, database
 }
 

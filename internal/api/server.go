@@ -14,25 +14,27 @@ import (
 	"github.com/drose-drcs/signpost/internal/config"
 	"github.com/drose-drcs/signpost/internal/crypto"
 	"github.com/drose-drcs/signpost/internal/db"
+	"github.com/drose-drcs/signpost/internal/queue"
 )
 
 // Server is the SignPost REST API server.
 type Server struct {
-	db        *db.DB
-	configGen *config.Generator
-	keysDir   string
-	router    chi.Router
-	adminUser string
-	adminPass string
-	encKey    []byte  // AES-256 key derived from SIGNPOST_SECRET_KEY
-	dataDir   string  // data directory path
-	hostname  string  // mail hostname (e.g., mail.drcs.ca)
-	version   string  // app version
-	webFS     fs.FS   // embedded frontend, nil in dev
+	db           *db.DB
+	configGen    *config.Generator
+	keysDir      string
+	router       chi.Router
+	adminUser    string
+	adminPass    string
+	encKey       []byte          // AES-256 key derived from SIGNPOST_SECRET_KEY
+	dataDir      string          // data directory path
+	hostname     string          // mail hostname (e.g., mail.drcs.ca)
+	version      string          // app version
+	queueScanner *queue.Scanner  // Maddy queue scanner
+	webFS        fs.FS           // embedded frontend, nil in dev
 }
 
 // NewServer creates a new API server.
-func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser, adminPass, secretKey, dataDir, hostname, version string, webFS fs.FS) *Server {
+func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser, adminPass, secretKey, dataDir, hostname, version string, queueScanner *queue.Scanner, webFS fs.FS) *Server {
 	var encKey []byte
 	if secretKey != "" {
 		var err error
@@ -42,16 +44,17 @@ func NewServer(database *db.DB, configGen *config.Generator, keysDir, adminUser,
 		}
 	}
 	s := &Server{
-		db:        database,
-		configGen: configGen,
-		keysDir:   keysDir,
-		adminUser: adminUser,
-		adminPass: adminPass,
-		encKey:    encKey,
-		dataDir:   dataDir,
-		hostname:  hostname,
-		version:   version,
-		webFS:     webFS,
+		db:           database,
+		configGen:    configGen,
+		keysDir:      keysDir,
+		adminUser:    adminUser,
+		adminPass:    adminPass,
+		encKey:       encKey,
+		dataDir:      dataDir,
+		hostname:     hostname,
+		version:      version,
+		queueScanner: queueScanner,
+		webFS:        webFS,
 	}
 	s.router = s.buildRouter()
 	return s
@@ -128,6 +131,9 @@ func (s *Server) buildRouter() chi.Router {
 		// Mail logs
 		r.Get("/api/v1/logs", s.handleGetLogs)
 		r.Delete("/api/v1/logs", s.handleClearLogs)
+
+		// Queue
+		r.Get("/api/v1/queue", s.handleGetQueue)
 
 		// Test
 		r.Post("/api/v1/test/send", s.handleTestSend)

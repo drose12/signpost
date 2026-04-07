@@ -18,6 +18,7 @@ import (
 	"github.com/drose-drcs/signpost/internal/crypto"
 	"github.com/drose-drcs/signpost/internal/db"
 	"github.com/drose-drcs/signpost/internal/dkim"
+	"github.com/drose-drcs/signpost/internal/queue"
 	selfsigned "github.com/drose-drcs/signpost/internal/tls"
 )
 
@@ -576,6 +577,15 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("status"); v != "" {
 		filter.Status = &v
 	}
+	if s := r.URL.Query().Get("search"); s != "" {
+		filter.Search = &s
+	}
+	if f := r.URL.Query().Get("from"); f != "" {
+		filter.FromDate = &f
+	}
+	if t := r.URL.Query().Get("to"); t != "" {
+		filter.ToDate = &t
+	}
 
 	entries, err := s.db.ListMailLog(filter)
 	if err != nil {
@@ -596,6 +606,25 @@ func (s *Server) handleClearLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
+}
+
+// handleGetQueue returns the current mail queue snapshot.
+func (s *Server) handleGetQueue(w http.ResponseWriter, r *http.Request) {
+	if s.queueScanner == nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"items": []interface{}{},
+			"count": 0,
+		})
+		return
+	}
+	items := s.queueScanner.Items()
+	if items == nil {
+		items = []queue.QueueItem{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"items": items,
+		"count": len(items),
+	})
 }
 
 // loginAuth implements smtp.Auth for the LOGIN mechanism.
