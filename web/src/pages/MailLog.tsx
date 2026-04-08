@@ -267,7 +267,7 @@ function MailLogTab() {
                           <StatusBadge status={entry.status} />
                         </TableCell>
                         <TableCell className="text-sm text-slate-600 dark:text-slate-400">
-                          {entry.relay_host || (entry.status === 'sent' ? 'direct' : '\u2014')}
+                          {entry.relay_host || '\u2014'}
                         </TableCell>
                         <TableCell>
                           {entry.dkim_signed ? (
