@@ -123,7 +123,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.8.0 — login background, README screenshot, discoverability
+v0.9.0 — real-time mail logging, queue visibility, relay queue wrapping
 
 ## Deployment Process
 

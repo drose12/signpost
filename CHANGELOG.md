@@ -5,6 +5,24 @@ All notable changes to SignPost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-04-07
+
+### Added
+- Real-time mail log capture from Maddy structured logs via log tailer goroutine
+- Queue visibility — scans Maddy queue directories every 30s, new Queue tab in UI
+- Relay targets wrapped in `target.queue` blocks for retry safety (no more lost mail)
+- Enhanced mail log: search, date range filters, expandable row details
+- Status badges for accepted, sent, failed, deferred, rejected
+- DKIM and relay host auto-populated from domain config in log entries
+- `log stderr_ts` in Maddy config for timestamped log output
+- s6 log service capturing Maddy stderr to file for tailer
+
+### Fixed
+- Go tests no longer send real mail through live Maddy (dead port isolation)
+- Relay column shows actual relay host instead of misleading "direct"
+- DKIM column reflects domain config instead of always showing X
+- Migration uses table rebuild instead of multi-statement ALTER TABLE (go-sqlite3 compatibility)
+
 ## [0.8.0] - 2026-04-04
 
 ### Added
