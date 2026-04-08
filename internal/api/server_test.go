@@ -348,9 +348,11 @@ func TestStatus(t *testing.T) {
 }
 
 func TestTestSend(t *testing.T) {
+	// Use a dead port so the test never sends real mail through a running Maddy
+	t.Setenv("SIGNPOST_SMTP_PORT", "19")
 	srv, _ := testServer(t)
 
-	// When Maddy is not running, test send should return 200 with status "failed"
+	// Test send should return 200 with status "failed" (connection refused on dead port)
 	rr := doRequest(t, srv, "POST", "/api/v1/test/send", map[string]string{
 		"from": "test@drcs.ca",
 		"to":   "test@example.com",
@@ -360,9 +362,8 @@ func TestTestSend(t *testing.T) {
 	}
 	var resp map[string]string
 	json.Unmarshal(rr.Body.Bytes(), &resp)
-	// Status will be "failed" since no Maddy is running; that is expected
-	if resp["status"] != "failed" && resp["status"] != "sent" {
-		t.Errorf("expected status 'failed' or 'sent', got %q", resp["status"])
+	if resp["status"] != "failed" {
+		t.Errorf("expected status 'failed', got %q", resp["status"])
 	}
 }
 
