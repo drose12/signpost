@@ -38,25 +38,25 @@ type DBWriter interface {
 	LogMailEvent(msgID, fromAddr, toAddr, status string, relayHost, sendErr *string, sourceIP, sourcePort string, dkimSigned bool) error
 }
 
-// RelayLookup resolves a sender domain to its active relay host.
-// Returns the relay host (e.g., "smtp.gmail.com") or empty string if direct delivery.
-type RelayLookup interface {
+// DomainLookup resolves sender domain metadata for log enrichment.
+type DomainLookup interface {
 	LookupRelayHost(senderDomain string) string
+	HasDKIM(senderDomain string) bool
 }
 
 // Tailer watches a Maddy log file and writes parsed mail events to the database.
 type Tailer struct {
-	logPath     string
-	db          DBWriter
-	relayLookup RelayLookup
+	logPath      string
+	db           DBWriter
+	domainLookup DomainLookup
 }
 
 // NewTailer creates a new Tailer that watches the given log file and writes events to db.
-func NewTailer(logPath string, db DBWriter, relayLookup RelayLookup) *Tailer {
+func NewTailer(logPath string, db DBWriter, domainLookup DomainLookup) *Tailer {
 	return &Tailer{
-		logPath:     logPath,
-		db:          db,
-		relayLookup: relayLookup,
+		logPath:      logPath,
+		db:           db,
+		domainLookup: domainLookup,
 	}
 }
 
@@ -129,11 +129,15 @@ func (t *Tailer) processLine(line string) {
 		return
 	}
 
-	// On incoming message, look up the relay host for the sender's domain.
-	if args.Status == "accepted" && args.FromAddr != "" && t.relayLookup != nil {
+	// On incoming message, enrich with relay host and DKIM status from domain config.
+	if args.Status == "accepted" && args.FromAddr != "" && t.domainLookup != nil {
 		if parts := strings.SplitN(args.FromAddr, "@", 2); len(parts) == 2 {
-			if host := t.relayLookup.LookupRelayHost(parts[1]); host != "" {
+			domain := parts[1]
+			if host := t.domainLookup.LookupRelayHost(domain); host != "" {
 				args.RelayHost = &host
+			}
+			if t.domainLookup.HasDKIM(domain) {
+				args.DKIMSigned = true
 			}
 		}
 	}

@@ -124,6 +124,13 @@ func (db *DB) LookupRelayHost(senderDomain string) string {
 	return host.String
 }
 
+// HasDKIM returns true if the domain has a DKIM key configured.
+func (db *DB) HasDKIM(senderDomain string) bool {
+	var keyPath sql.NullString
+	err := db.QueryRow(`SELECT dkim_key_path FROM domains WHERE name = ? AND active = 1`, senderDomain).Scan(&keyPath)
+	return err == nil && keyPath.Valid && keyPath.String != ""
+}
+
 // PruneMailLog deletes log entries older than the given duration.
 func (db *DB) PruneMailLog(olderThan time.Duration) (int64, error) {
 	cutoff := time.Now().Add(-olderThan)
