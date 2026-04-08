@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"time"
 )
@@ -108,6 +109,19 @@ func (db *DB) ListMailLog(filter MailLogFilter) ([]MailLogEntry, error) {
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// LookupRelayHost returns the active relay host for a sender domain.
+// Returns empty string if domain uses direct delivery or domain is not found.
+func (db *DB) LookupRelayHost(senderDomain string) string {
+	var host sql.NullString
+	err := db.QueryRow(`SELECT rc.host FROM relay_configs rc
+		JOIN domains d ON d.id = rc.domain_id
+		WHERE d.name = ? AND rc.active = 1 AND rc.method != 'direct'`, senderDomain).Scan(&host)
+	if err != nil || !host.Valid {
+		return ""
+	}
+	return host.String
 }
 
 // PruneMailLog deletes log entries older than the given duration.

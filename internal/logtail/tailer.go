@@ -38,17 +38,25 @@ type DBWriter interface {
 	LogMailEvent(msgID, fromAddr, toAddr, status string, relayHost, sendErr *string, sourceIP, sourcePort string, dkimSigned bool) error
 }
 
+// RelayLookup resolves a sender domain to its active relay host.
+// Returns the relay host (e.g., "smtp.gmail.com") or empty string if direct delivery.
+type RelayLookup interface {
+	LookupRelayHost(senderDomain string) string
+}
+
 // Tailer watches a Maddy log file and writes parsed mail events to the database.
 type Tailer struct {
-	logPath string
-	db      DBWriter
+	logPath     string
+	db          DBWriter
+	relayLookup RelayLookup
 }
 
 // NewTailer creates a new Tailer that watches the given log file and writes events to db.
-func NewTailer(logPath string, db DBWriter) *Tailer {
+func NewTailer(logPath string, db DBWriter, relayLookup RelayLookup) *Tailer {
 	return &Tailer{
-		logPath: logPath,
-		db:      db,
+		logPath:     logPath,
+		db:          db,
+		relayLookup: relayLookup,
 	}
 }
 
@@ -119,6 +127,15 @@ func (t *Tailer) processLine(line string) {
 	args := EventToMailLog(evt)
 	if args == nil {
 		return
+	}
+
+	// On incoming message, look up the relay host for the sender's domain.
+	if args.Status == "accepted" && args.FromAddr != "" && t.relayLookup != nil {
+		if parts := strings.SplitN(args.FromAddr, "@", 2); len(parts) == 2 {
+			if host := t.relayLookup.LookupRelayHost(parts[1]); host != "" {
+				args.RelayHost = &host
+			}
+		}
 	}
 
 	if err := t.db.LogMailEvent(

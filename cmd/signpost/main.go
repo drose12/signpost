@@ -107,7 +107,7 @@ func main() {
 	defer cancel()
 
 	logPath := filepath.Join(dataDir, "logs", "maddy", "current")
-	tailer := logtail.NewTailer(logPath, database)
+	tailer := logtail.NewTailer(logPath, database, database)
 	go tailer.Run(ctx)
 	log.Printf("Log tailer started, watching %s", logPath)
 
