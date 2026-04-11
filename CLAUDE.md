@@ -118,7 +118,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.11.0 — Let's Encrypt ACME, SMTPS port 465, TLS management UI
+v0.11.1 — SMTPS 465 toggle on Dashboard
 
 ## Deployment Process
 
