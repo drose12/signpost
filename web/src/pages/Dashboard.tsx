@@ -343,22 +343,19 @@ function SMTPPortsCard() {
             disabled={toggling !== null}
           />
         </div>
+        {(submissionEnabled || smtpsEnabled) && (
+          <div className="text-xs text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-2">
+            {userCount > 0 ? (
+              <span className="text-green-600 dark:text-green-400">{userCount} SMTP user{userCount !== 1 ? 's' : ''} configured</span>
+            ) : (
+              <span className="text-amber-600 dark:text-amber-400">No SMTP users — <a href="/smtp-users" className="underline">add one</a> for auth ports</span>
+            )}
+          </div>
+        )}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div>
-              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                Port 587 (Submission)
-                {submissionEnabled && userCount > 0 && (
-                  <span className="text-xs font-normal text-green-600 dark:text-green-400 ml-2">({userCount} user{userCount !== 1 ? 's' : ''} configured)</span>
-                )}
-              </p>
-              {submissionEnabled && userCount === 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">No users — <a href="/smtp-users" className="underline">add one</a></p>
-              )}
-              {!submissionEnabled && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">SMTP AUTH (username/password)</p>
-              )}
-            </div>
+          <div>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Port 587 (Submission)</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">STARTTLS + SMTP AUTH</p>
           </div>
           <Switch
             checked={submissionEnabled}
@@ -367,21 +364,9 @@ function SMTPPortsCard() {
           />
         </div>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div>
-              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                Port 465 (SMTPS)
-                {smtpsEnabled && userCount > 0 && (
-                  <span className="text-xs font-normal text-green-600 dark:text-green-400 ml-2">({userCount} user{userCount !== 1 ? 's' : ''} configured)</span>
-                )}
-              </p>
-              {smtpsEnabled && userCount === 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">No users — <a href="/smtp-users" className="underline">add one</a></p>
-              )}
-              {!smtpsEnabled && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">Implicit TLS, SMTP AUTH (SSL checkbox clients)</p>
-              )}
-            </div>
+          <div>
+            <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Port 465 (SMTPS)</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Implicit TLS + SMTP AUTH</p>
           </div>
           <Switch
             checked={smtpsEnabled}
