@@ -66,6 +66,8 @@ func main() {
 				log.Printf("WARNING: Failed to update TLS cert paths in DB: %v", updateErr)
 			}
 		}
+	} else if tlsConfig != nil && tlsConfig.Mode == "acme" {
+		log.Printf("TLS mode: ACME (Let's Encrypt) — Maddy will handle certificate acquisition")
 	}
 
 	// Set up decryption for relay passwords
