@@ -5,6 +5,13 @@ All notable changes to SignPost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-04-11
+
+### Security
+- Updated vite 8.0.3 → 8.0.8 (CVE fixes: path traversal in optimized deps, `server.fs.deny` bypass, WebSocket arbitrary file read)
+- Updated hono 4.12.9 → 4.12.12 (CVE fixes: cookie name validation, IPv4-mapped IPv6 bypass, path traversal in toSSG, serveStatic middleware bypass)
+- Updated @hono/node-server 1.19.11 → 1.19.13 (serveStatic middleware bypass)
+
 ## [0.10.0] - 2026-04-11
 
 ### Added

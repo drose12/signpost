@@ -118,7 +118,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.10.0 — logout button
+v0.10.1 — security patch (vite, hono CVEs)
 
 ## Deployment Process
 
