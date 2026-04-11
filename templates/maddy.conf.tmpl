@@ -123,6 +123,7 @@ auth.pass_table local_auth {
 {{- if .SMTPEnabled}}
 
 smtp tcp://0.0.0.0:{{.SMTPPort}} {
+    tls off
     limits {
         all rate 20 1s
         all concurrency 10

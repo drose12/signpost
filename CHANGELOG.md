@@ -5,6 +5,11 @@ All notable changes to SignPost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2026-04-11
+
+### Fixed
+- Disable TLS on port 25 (local SMTP) — port 25 is network-trust only, and advertising STARTTLS caused clients like the UniFi UDM Pro to attempt TLS, fail on the self-signed cert, and silently disconnect. Port 587 (submission) retains TLS for authenticated access.
+
 ## [0.10.2] - 2026-04-11
 
 ### Fixed

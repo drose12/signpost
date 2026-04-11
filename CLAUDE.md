@@ -118,7 +118,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.10.2 — inject missing From header for RFC 5322 compliance
+v0.10.3 — disable TLS on port 25, inject missing From header
 
 ## Deployment Process
 
