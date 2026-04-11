@@ -27,7 +27,7 @@ tls.loader.acme acme_tls {
     challenge dns-01
     {{- if eq .TLS.ACMEProvider "cloudflare"}}
     dns cloudflare {
-        api_token {env:SIGNPOST_CF_API_TOKEN}
+        api_token "{{.TLS.CFToken}}"
     }
     {{- end}}
 }

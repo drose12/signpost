@@ -37,6 +37,7 @@ type TLSData struct {
 	KeyPath      string
 	ACMEEmail    string
 	ACMEProvider string
+	CFToken      string
 }
 
 // DomainData holds per-domain config for the template.
@@ -263,6 +264,13 @@ func (g *Generator) buildTemplateData(database *db.DB, decryptPassword func(enc,
 		}
 		if tlsConfig.ACMEProvider != nil {
 			data.TLS.ACMEProvider = *tlsConfig.ACMEProvider
+		}
+		if tlsConfig.CFTokenEnc != nil && tlsConfig.CFTokenNonce != nil && decryptPassword != nil {
+			token, err := decryptPassword(*tlsConfig.CFTokenEnc, *tlsConfig.CFTokenNonce)
+			if err != nil {
+				return nil, fmt.Errorf("decrypting CF API token: %w", err)
+			}
+			data.TLS.CFToken = token
 		}
 	}
 
