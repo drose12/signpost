@@ -173,4 +173,8 @@ var migrations = []string{
 	CREATE INDEX idx_mail_log_status ON mail_log(status);
 	CREATE INDEX idx_mail_log_domain_id ON mail_log(domain_id);
 	CREATE UNIQUE INDEX idx_mail_log_msg_id ON mail_log(msg_id);`,
+
+	// Migration 9: Add encrypted Cloudflare API token to tls_config for ACME DNS-01.
+	`ALTER TABLE tls_config ADD COLUMN cf_token_enc TEXT;
+	 ALTER TABLE tls_config ADD COLUMN cf_token_nonce TEXT;`,
 }

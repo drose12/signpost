@@ -51,9 +51,10 @@ func (db *DB) GetAllSettings() (map[string]string, error) {
 func (db *DB) GetTLSConfig() (*TLSConfig, error) {
 	var tc TLSConfig
 	err := db.QueryRow(`SELECT mode, acme_email, acme_provider, cert_path,
-		key_path, cert_expiry, updated_at FROM tls_config WHERE id = 1`).Scan(
+		key_path, cert_expiry, updated_at, cf_token_enc, cf_token_nonce
+		FROM tls_config WHERE id = 1`).Scan(
 		&tc.Mode, &tc.ACMEEmail, &tc.ACMEProvider, &tc.CertPath,
-		&tc.KeyPath, &tc.CertExpiry, &tc.UpdatedAt)
+		&tc.KeyPath, &tc.CertExpiry, &tc.UpdatedAt, &tc.CFTokenEnc, &tc.CFTokenNonce)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -70,6 +71,16 @@ func (db *DB) UpdateTLSConfig(mode string, acmeEmail, acmeProvider, certPath, ke
 		mode, acmeEmail, acmeProvider, certPath, keyPath)
 	if err != nil {
 		return fmt.Errorf("updating TLS config: %w", err)
+	}
+	return nil
+}
+
+// UpdateTLSToken updates the encrypted Cloudflare API token.
+func (db *DB) UpdateTLSToken(tokenEnc, tokenNonce string) error {
+	_, err := db.Exec(`UPDATE tls_config SET cf_token_enc = ?, cf_token_nonce = ?,
+		updated_at = CURRENT_TIMESTAMP WHERE id = 1`, tokenEnc, tokenNonce)
+	if err != nil {
+		return fmt.Errorf("updating TLS CF token: %w", err)
 	}
 	return nil
 }

@@ -55,6 +55,8 @@ type TLSConfig struct {
 	KeyPath      *string    `json:"key_path,omitempty"`
 	CertExpiry   *time.Time `json:"cert_expiry,omitempty"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+	CFTokenEnc   *string    `json:"-"`
+	CFTokenNonce *string    `json:"-"`
 }
 
 // MailLogEntry represents a single mail send event.
