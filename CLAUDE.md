@@ -118,7 +118,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.10.1 — security patch (vite, hono CVEs)
+v0.10.2 — inject missing From header for RFC 5322 compliance
 
 ## Deployment Process
 

@@ -132,6 +132,12 @@ smtp tcp://0.0.0.0:{{.SMTPPort}} {
     {{- if $d.Active}}
 
     source {{$d.Name}} {
+        check {
+            command /app/scripts/add-from-header.sh {sender} {
+                run_on body
+                code 1 reject
+            }
+        }
         {{- if $d.DKIMKeyPath}}
         modify {
             dkim {
@@ -183,6 +189,12 @@ submission tcp://0.0.0.0:{{.SubmissionPort}} {
     {{- if $d.Active}}
 
     source {{$d.Name}} {
+        check {
+            command /app/scripts/add-from-header.sh {sender} {
+                run_on body
+                code 1 reject
+            }
+        }
         {{- if $d.DKIMKeyPath}}
         modify {
             dkim {

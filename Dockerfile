@@ -43,9 +43,10 @@ RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
 # Install runtime dependencies
 RUN apk add --no-cache curl sqlite-libs openssl msmtp
 
-# Copy SignPost binary, templates, and changelog
+# Copy SignPost binary, templates, scripts, and changelog
 COPY --from=builder /build/signpost /app/signpost
 COPY templates/ /app/templates/
+COPY scripts/ /app/scripts/
 COPY CHANGELOG.md /app/CHANGELOG.md
 
 # Copy s6 service definitions
