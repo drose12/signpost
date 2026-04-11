@@ -139,8 +139,12 @@ v0.10.1 — security patch (vite, hono CVEs)
 
 ### Prod (TrueNAS — truenas.drcs.ca / 192.168.1.2)
 1. Wait for GitHub Actions Release workflow to finish: `gh run watch <run-id>`
-2. Pull and restart: `ssh root@truenas.drcs.ca "docker pull ghcr.io/drose12/signpost:latest && docker restart signpost"`
-3. Verify: `ssh root@truenas.drcs.ca "curl -s http://localhost:8080/api/v1/healthz"`
+2. Pull new image: `ssh root@truenas.drcs.ca "docker pull ghcr.io/drose12/signpost:latest"`
+3. Recreate container (**docker restart is not enough** — it reuses the old image):
+   ```
+   ssh root@truenas.drcs.ca "docker stop signpost && docker rm signpost && docker run -d --name signpost --restart unless-stopped -p 25:25 -p 587:587 -p 8080:8080 -v signpost_signpost-data:/data/signpost -e SIGNPOST_ADMIN_USER=admin -e SIGNPOST_ADMIN_PASS=dBbVvLAcHu3dAaa9FEnc -e SIGNPOST_ENV=prod -e SIGNPOST_DOMAIN=drcs.ca -e SIGNPOST_SECRET_KEY=Q4mZ8tN1xK7pR2vH9cL5yW3dS6jF0bTu ghcr.io/drose12/signpost:latest"
+   ```
+4. Verify: `ssh root@truenas.drcs.ca "curl -s http://localhost:8080/api/v1/healthz"`
 
 Only commit code when changes are ready. Do not rebuild the container on every file change.
 
