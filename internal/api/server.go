@@ -123,6 +123,7 @@ func (s *Server) buildRouter() chi.Router {
 
 		// TLS
 		r.Get("/api/v1/tls", s.handleGetTLS)
+		r.Put("/api/v1/tls", s.handleUpdateTLS)
 		r.Post("/api/v1/tls/generate-selfsigned", s.handleGenerateSelfSigned)
 
 		// Network

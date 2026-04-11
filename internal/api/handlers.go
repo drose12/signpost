@@ -2,7 +2,9 @@ package api
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
@@ -1122,7 +1124,43 @@ func (s *Server) handlePublicIP(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"ip": ip})
 }
 
-// handleGetTLS returns the current TLS configuration.
+// certInfo holds parsed certificate details.
+type certInfo struct {
+	Issuer        string   `json:"issuer"`
+	Subject       string   `json:"subject"`
+	SANs          []string `json:"sans"`
+	NotBefore     string   `json:"not_before"`
+	NotAfter      string   `json:"not_after"`
+	DaysRemaining int      `json:"days_remaining"`
+	Serial        string   `json:"serial"`
+}
+
+func parseCertFile(path string) (*certInfo, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("no PEM block found")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	days := int(time.Until(cert.NotAfter).Hours() / 24)
+	return &certInfo{
+		Issuer:        cert.Issuer.String(),
+		Subject:       cert.Subject.CommonName,
+		SANs:          cert.DNSNames,
+		NotBefore:     cert.NotBefore.Format(time.RFC3339),
+		NotAfter:      cert.NotAfter.Format(time.RFC3339),
+		DaysRemaining: days,
+		Serial:        cert.SerialNumber.String(),
+	}, nil
+}
+
+// handleGetTLS returns the current TLS configuration with cert details.
 func (s *Server) handleGetTLS(w http.ResponseWriter, r *http.Request) {
 	tlsConfig, err := s.db.GetTLSConfig()
 	if err != nil {
@@ -1131,24 +1169,122 @@ func (s *Server) handleGetTLS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]interface{}{
-		"mode":      tlsConfig.Mode,
-		"cert_path": tlsConfig.CertPath,
-		"key_path":  tlsConfig.KeyPath,
-	}
-	if tlsConfig.CertExpiry != nil {
-		resp["cert_expiry"] = tlsConfig.CertExpiry
+		"mode": tlsConfig.Mode,
 	}
 
-	// Check if cert file exists and get info
-	if tlsConfig.CertPath != nil && *tlsConfig.CertPath != "" {
-		if _, err := os.Stat(*tlsConfig.CertPath); err == nil {
+	if tlsConfig.ACMEEmail != nil {
+		resp["acme_email"] = *tlsConfig.ACMEEmail
+	}
+	if tlsConfig.ACMEProvider != nil {
+		resp["acme_provider"] = *tlsConfig.ACMEProvider
+	}
+	resp["has_cf_token"] = tlsConfig.CFTokenEnc != nil && *tlsConfig.CFTokenEnc != ""
+
+	// Find the cert file to parse
+	certPath := ""
+	if tlsConfig.CertPath != nil {
+		certPath = *tlsConfig.CertPath
+	}
+
+	if certPath != "" {
+		if info, err := parseCertFile(certPath); err == nil {
 			resp["cert_exists"] = true
+			resp["cert_issuer"] = info.Issuer
+			resp["cert_subject"] = info.Subject
+			resp["cert_sans"] = info.SANs
+			resp["cert_not_before"] = info.NotBefore
+			resp["cert_not_after"] = info.NotAfter
+			resp["cert_days_remaining"] = info.DaysRemaining
+			resp["cert_serial"] = info.Serial
 		} else {
 			resp["cert_exists"] = false
 		}
+	} else {
+		resp["cert_exists"] = false
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleUpdateTLS switches TLS mode and updates ACME configuration.
+func (s *Server) handleUpdateTLS(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mode     string  `json:"mode"`
+		Email    *string `json:"email"`
+		Provider *string `json:"provider"`
+		CFToken  *string `json:"cf_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Mode != "self-signed" && req.Mode != "acme" {
+		writeError(w, http.StatusBadRequest, "mode must be 'self-signed' or 'acme'")
+		return
+	}
+
+	if req.Mode == "acme" {
+		if req.Email == nil || *req.Email == "" {
+			writeError(w, http.StatusBadRequest, "email is required for ACME mode")
+			return
+		}
+		if req.CFToken == nil || *req.CFToken == "" {
+			existing, _ := s.db.GetTLSConfig()
+			if existing == nil || existing.CFTokenEnc == nil || *existing.CFTokenEnc == "" {
+				writeError(w, http.StatusBadRequest, "cf_token is required for ACME mode")
+				return
+			}
+		}
+	}
+
+	// Encrypt and store CF token if provided
+	if req.CFToken != nil && *req.CFToken != "" {
+		enc, nonce, err := crypto.Encrypt(s.encKey, *req.CFToken)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to encrypt token")
+			return
+		}
+		if err := s.db.UpdateTLSToken(enc, nonce); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	// Default provider to cloudflare
+	provider := "cloudflare"
+	if req.Provider != nil {
+		provider = *req.Provider
+	}
+	providerPtr := &provider
+
+	// Update TLS config in DB
+	if err := s.db.UpdateTLSConfig(req.Mode, req.Email, providerPtr, nil, nil); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// If switching to self-signed, generate cert
+	if req.Mode == "self-signed" {
+		hostname := s.hostname
+		if hostname == "" {
+			hostname = "localhost"
+		}
+		os.Remove(s.dataDir + "/tls/selfsigned.crt")
+		os.Remove(s.dataDir + "/tls/selfsigned.key")
+		certPath, keyPath, err := selfsigned.EnsureSelfSignedCert(s.dataDir, hostname)
+		if err == nil {
+			s.db.UpdateTLSCertPaths(certPath, keyPath)
+		}
+	}
+
+	// Regenerate config and reload Maddy
+	go s.regenerateConfig()
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"message": fmt.Sprintf("TLS mode set to %s", req.Mode),
+	})
 }
 
 // handleGenerateSelfSigned generates (or regenerates) a self-signed TLS certificate.
