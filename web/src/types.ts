@@ -137,3 +137,18 @@ export interface QueueResponse {
   items: QueueItem[];
   count: number;
 }
+
+export interface TLSResponse {
+  mode: string;
+  acme_email?: string;
+  acme_provider?: string;
+  has_cf_token: boolean;
+  cert_exists: boolean;
+  cert_issuer?: string;
+  cert_subject?: string;
+  cert_sans?: string[];
+  cert_not_before?: string;
+  cert_not_after?: string;
+  cert_days_remaining?: number;
+  cert_serial?: string;
+}

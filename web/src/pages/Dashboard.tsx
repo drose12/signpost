@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api } from '@/api';
-import type { StatusResponse, Domain, TestSendResponse } from '@/types';
+import type { StatusResponse, Domain, TestSendResponse, TLSResponse } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { InfoIcon, Send, DownloadIcon, UploadIcon } from 'lucide-react';
+import { InfoIcon, Send, DownloadIcon, UploadIcon, ShieldCheck, RefreshCw } from 'lucide-react';
 
 function TestEmailCard() {
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -129,44 +129,154 @@ function TestEmailCard() {
 }
 
 function TLSStatusCard() {
-  const [tlsInfo, setTlsInfo] = useState<{ mode: string; cert_path?: string; cert_exists?: boolean } | null>(null);
+  const [tlsInfo, setTlsInfo] = useState<TLSResponse | null>(null);
+  const [mode, setMode] = useState('self-signed');
+  const [email, setEmail] = useState('');
+  const [cfToken, setCfToken] = useState('');
+  const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  useEffect(() => {
-    api.get<{ mode: string; cert_path?: string; cert_exists?: boolean }>('/tls')
-      .then(setTlsInfo)
-      .catch(() => {});
-  }, []);
+  async function loadTLS() {
+    try {
+      const info = await api.get<TLSResponse>('/tls');
+      setTlsInfo(info);
+      setMode(info.mode);
+      setEmail(info.acme_email || '');
+    } catch { /* ignore */ }
+  }
 
-  async function handleGenerate() {
+  useEffect(() => { loadTLS(); }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const body: Record<string, string> = { mode };
+      if (mode === 'acme') {
+        body.email = email;
+        body.provider = 'cloudflare';
+        if (cfToken) body.cf_token = cfToken;
+      }
+      await api.put('/tls', body);
+      toast.success(mode === 'acme' ? 'Switched to Let\'s Encrypt — Maddy will acquire cert' : 'Switched to self-signed');
+      setCfToken('');
+      await loadTLS();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update TLS');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRegenerate() {
     setGenerating(true);
     try {
-      await api.post('/tls/generate-selfsigned');
-      toast.success('Self-signed certificate generated');
-      const info = await api.get<{ mode: string; cert_path?: string; cert_exists?: boolean }>('/tls');
-      setTlsInfo(info);
+      if (tlsInfo?.mode === 'acme') {
+        await api.put('/tls', { mode: 'acme', email, provider: 'cloudflare' });
+        toast.success('Renewal triggered — Maddy will re-acquire cert');
+      } else {
+        await api.post('/tls/generate-selfsigned');
+        toast.success('Self-signed certificate regenerated');
+      }
+      await loadTLS();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to generate certificate');
+      toast.error(err instanceof Error ? err.message : 'Failed');
     } finally {
       setGenerating(false);
     }
   }
 
+  function expiryColor(days?: number) {
+    if (days == null) return 'bg-slate-400';
+    if (days > 30) return 'bg-green-500';
+    if (days >= 7) return 'bg-amber-500';
+    return 'bg-red-500';
+  }
+
+  const dirty = mode !== tlsInfo?.mode || (mode === 'acme' && (email !== (tlsInfo?.acme_email || '') || cfToken !== ''));
+
   return (
-    <Card className="dark:bg-slate-800">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">TLS</CardTitle>
-        <Button size="sm" className="h-7 px-3 text-xs" onClick={handleGenerate} disabled={generating || !tlsInfo}>
-          {generating ? 'Generating...' : tlsInfo?.cert_exists ? 'Regenerate' : 'Generate'}
+    <Card className="dark:bg-slate-800 col-span-1 sm:col-span-3">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-slate-500" />
+          <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">TLS Certificate</CardTitle>
+        </div>
+        <Button size="sm" className="h-7 px-3 text-xs" onClick={handleRegenerate} disabled={generating || !tlsInfo?.cert_exists}>
+          <RefreshCw className={`h-3 w-3 mr-1 ${generating ? 'animate-spin' : ''}`} />
+          {tlsInfo?.mode === 'acme' ? 'Renew Now' : 'Regenerate'}
         </Button>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center gap-2">
-          {tlsInfo?.cert_exists && <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />}
-          {tlsInfo?.cert_exists === false && <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />}
-          <span className="text-lg font-semibold text-slate-800 dark:text-slate-100 capitalize">
-            {tlsInfo?.mode || '—'}
-          </span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Left: Mode config */}
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Mode</Label>
+              <Select value={mode} onValueChange={setMode}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="self-signed">Self-Signed</SelectItem>
+                  <SelectItem value="acme">Let's Encrypt</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {mode === 'acme' && (
+              <>
+                <div>
+                  <Label className="text-xs">ACME Email</Label>
+                  <Input className="h-8 text-sm" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
+                </div>
+                <div>
+                  <Label className="text-xs">Cloudflare API Token</Label>
+                  <Input className="h-8 text-sm font-mono" type="password" value={cfToken}
+                    onChange={e => setCfToken(e.target.value)}
+                    placeholder={tlsInfo?.has_cf_token ? '(stored)' : 'Enter token'} />
+                </div>
+              </>
+            )}
+
+            {dirty && (
+              <Button size="sm" className="h-8 text-xs w-full" onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving...' : 'Save TLS Configuration'}
+              </Button>
+            )}
+          </div>
+
+          {/* Right: Cert details */}
+          <div className="space-y-2 text-sm">
+            {tlsInfo?.cert_exists ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${expiryColor(tlsInfo.cert_days_remaining)} shrink-0`} />
+                  <span className="font-medium text-slate-800 dark:text-slate-100">
+                    {tlsInfo.cert_days_remaining != null ? `${tlsInfo.cert_days_remaining} days remaining` : 'Certificate active'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+                  <span className="font-medium">Issuer</span>
+                  <span className="truncate">{tlsInfo.cert_issuer}</span>
+                  <span className="font-medium">Subject</span>
+                  <span>{tlsInfo.cert_subject}</span>
+                  {tlsInfo.cert_sans && tlsInfo.cert_sans.length > 0 && (
+                    <>
+                      <span className="font-medium">SANs</span>
+                      <span>{tlsInfo.cert_sans.join(', ')}</span>
+                    </>
+                  )}
+                  <span className="font-medium">Valid</span>
+                  <span>{tlsInfo.cert_not_before ? new Date(tlsInfo.cert_not_before).toLocaleDateString() : '—'} — {tlsInfo.cert_not_after ? new Date(tlsInfo.cert_not_after).toLocaleDateString() : '—'}</span>
+                  <span className="font-medium">Serial</span>
+                  <span className="font-mono truncate">{tlsInfo.cert_serial}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 text-slate-500">
+                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                No certificate found
+              </div>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -395,7 +505,7 @@ export function Dashboard() {
       <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">Dashboard</h1>
 
       {/* Status cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card className="dark:bg-slate-800">
           <CardContent className="pt-4 pb-3">
             <div className="flex items-center justify-between">
@@ -413,9 +523,10 @@ export function Dashboard() {
             </div>
           </CardContent>
         </Card>
-
-        <TLSStatusCard />
       </div>
+
+      {/* TLS Certificate */}
+      <TLSStatusCard />
 
       {/* SMTP Ports */}
       <SMTPPortsCard />
