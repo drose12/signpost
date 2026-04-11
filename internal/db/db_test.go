@@ -41,7 +41,7 @@ func TestOpen(t *testing.T) {
 		t.Fatalf("SchemaVersion: %v", err)
 	}
 	if version != 9 {
-		t.Errorf("expected schema version 7, got %d", version)
+		t.Errorf("expected schema version 9, got %d", version)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestOpenIdempotent(t *testing.T) {
 
 	version, _ := db2.SchemaVersion()
 	if version != 9 {
-		t.Errorf("expected schema version 7 after reopening, got %d", version)
+		t.Errorf("expected schema version 9 after reopening, got %d", version)
 	}
 }
 
@@ -107,6 +107,53 @@ func TestDefaultTLSConfig(t *testing.T) {
 	}
 	if tc.Mode != "self-signed" {
 		t.Errorf("expected mode 'self-signed', got %q", tc.Mode)
+	}
+}
+
+func TestDefaultTLSConfigHasNilCFToken(t *testing.T) {
+	db := testDB(t)
+
+	tc, err := db.GetTLSConfig()
+	if err != nil {
+		t.Fatalf("GetTLSConfig: %v", err)
+	}
+	if tc.CFTokenEnc != nil {
+		t.Errorf("expected nil CFTokenEnc on fresh DB, got %v", tc.CFTokenEnc)
+	}
+	if tc.CFTokenNonce != nil {
+		t.Errorf("expected nil CFTokenNonce on fresh DB, got %v", tc.CFTokenNonce)
+	}
+}
+
+func TestUpdateTLSToken(t *testing.T) {
+	db := testDB(t)
+
+	err := db.UpdateTLSToken("encrypted-value", "nonce-value")
+	if err != nil {
+		t.Fatalf("UpdateTLSToken: %v", err)
+	}
+
+	tc, err := db.GetTLSConfig()
+	if err != nil {
+		t.Fatalf("GetTLSConfig: %v", err)
+	}
+	if tc.CFTokenEnc == nil || *tc.CFTokenEnc != "encrypted-value" {
+		t.Errorf("expected CFTokenEnc 'encrypted-value', got %v", tc.CFTokenEnc)
+	}
+	if tc.CFTokenNonce == nil || *tc.CFTokenNonce != "nonce-value" {
+		t.Errorf("expected CFTokenNonce 'nonce-value', got %v", tc.CFTokenNonce)
+	}
+}
+
+func TestUpdateTLSTokenOverwrite(t *testing.T) {
+	db := testDB(t)
+
+	db.UpdateTLSToken("first-enc", "first-nonce")
+	db.UpdateTLSToken("second-enc", "second-nonce")
+
+	tc, _ := db.GetTLSConfig()
+	if tc.CFTokenEnc == nil || *tc.CFTokenEnc != "second-enc" {
+		t.Errorf("expected CFTokenEnc 'second-enc', got %v", tc.CFTokenEnc)
 	}
 }
 

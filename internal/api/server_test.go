@@ -600,3 +600,209 @@ func TestSMTPUserAutoSubmissionToggle(t *testing.T) {
 		t.Errorf("expected submission_enabled='false' after deleting last user, got %q", val)
 	}
 }
+
+// --- TLS Endpoint Tests ---
+
+func TestGetTLSDefault(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "GET", "/api/v1/tls", nil, true)
+	if rr.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	if resp["mode"] != "self-signed" {
+		t.Errorf("expected mode 'self-signed', got %v", resp["mode"])
+	}
+	if resp["has_cf_token"] != false {
+		t.Errorf("expected has_cf_token false, got %v", resp["has_cf_token"])
+	}
+	if resp["cert_exists"] != false {
+		t.Errorf("expected cert_exists false on fresh DB, got %v", resp["cert_exists"])
+	}
+}
+
+func TestUpdateTLSSelfSigned(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "PUT", "/api/v1/tls", map[string]string{"mode": "self-signed"}, true)
+	if rr.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	if resp["status"] != "ok" {
+		t.Errorf("expected status 'ok', got %v", resp["status"])
+	}
+}
+
+func TestUpdateTLSAcmeWithToken(t *testing.T) {
+	srv, database := testServer(t)
+
+	rr := doRequest(t, srv, "PUT", "/api/v1/tls", map[string]string{
+		"mode":     "acme",
+		"email":    "admin@drcs.ca",
+		"cf_token": "test-cloudflare-api-token",
+	}, true)
+	if rr.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify DB was updated
+	tc, _ := database.GetTLSConfig()
+	if tc.Mode != "acme" {
+		t.Errorf("expected mode 'acme', got %q", tc.Mode)
+	}
+	if tc.ACMEEmail == nil || *tc.ACMEEmail != "admin@drcs.ca" {
+		t.Errorf("expected email 'admin@drcs.ca', got %v", tc.ACMEEmail)
+	}
+	if tc.CFTokenEnc == nil || *tc.CFTokenEnc == "" {
+		t.Error("expected CF token to be stored encrypted")
+	}
+}
+
+func TestUpdateTLSAcmeMissingEmail(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "PUT", "/api/v1/tls", map[string]string{
+		"mode": "acme",
+	}, true)
+	if rr.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdateTLSAcmeMissingTokenFirstTime(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "PUT", "/api/v1/tls", map[string]string{
+		"mode":  "acme",
+		"email": "a@b.com",
+	}, true)
+	if rr.Code != 400 {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdateTLSAcmeReusesExistingToken(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// First call stores the token
+	rr := doRequest(t, srv, "PUT", "/api/v1/tls", map[string]string{
+		"mode":     "acme",
+		"email":    "a@b.com",
+		"cf_token": "my-token",
+	}, true)
+	if rr.Code != 200 {
+		t.Fatalf("first PUT expected 200, got %d", rr.Code)
+	}
+
+	// Second call without token should succeed (reuses stored)
+	rr = doRequest(t, srv, "PUT", "/api/v1/tls", map[string]string{
+		"mode":  "acme",
+		"email": "a@b.com",
+	}, true)
+	if rr.Code != 200 {
+		t.Fatalf("second PUT expected 200 (reuse token), got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdateTLSInvalidMode(t *testing.T) {
+	srv, _ := testServer(t)
+
+	rr := doRequest(t, srv, "PUT", "/api/v1/tls", map[string]string{"mode": "manual"}, true)
+	if rr.Code != 400 {
+		t.Fatalf("expected 400 for invalid mode, got %d", rr.Code)
+	}
+}
+
+func TestGetTLSWithCFToken(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Store a token via PUT
+	doRequest(t, srv, "PUT", "/api/v1/tls", map[string]string{
+		"mode": "acme", "email": "a@b.com", "cf_token": "tok",
+	}, true)
+
+	// GET should show has_cf_token: true
+	rr := doRequest(t, srv, "GET", "/api/v1/tls", nil, true)
+	var resp map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &resp)
+	if resp["has_cf_token"] != true {
+		t.Errorf("expected has_cf_token true after storing token, got %v", resp["has_cf_token"])
+	}
+	if resp["mode"] != "acme" {
+		t.Errorf("expected mode 'acme', got %v", resp["mode"])
+	}
+}
+
+func TestBackupIncludesTLS(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Set up ACME with token
+	doRequest(t, srv, "PUT", "/api/v1/tls", map[string]string{
+		"mode": "acme", "email": "a@b.com", "cf_token": "my-secret-token",
+	}, true)
+
+	// Backup
+	rr := doRequest(t, srv, "GET", "/api/v1/backup", nil, true)
+	if rr.Code != 200 {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	var payload map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &payload)
+
+	tlsData, ok := payload["tls"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected 'tls' key in backup payload")
+	}
+	if tlsData["mode"] != "acme" {
+		t.Errorf("expected tls.mode 'acme', got %v", tlsData["mode"])
+	}
+	if tlsData["email"] != "a@b.com" {
+		t.Errorf("expected tls.email 'a@b.com', got %v", tlsData["email"])
+	}
+	if tlsData["cf_token"] != "my-secret-token" {
+		t.Errorf("expected decrypted cf_token in backup, got %v", tlsData["cf_token"])
+	}
+}
+
+func TestRestoreTLSConfig(t *testing.T) {
+	srv, database := testServer(t)
+
+	// Restore payload with TLS
+	payload := map[string]interface{}{
+		"signpost_version": "test",
+		"exported_at":      "2026-01-01T00:00:00Z",
+		"domains":          []interface{}{},
+		"smtp_users":       []interface{}{},
+		"settings":         map[string]string{},
+		"tls": map[string]interface{}{
+			"mode":     "acme",
+			"email":    "restored@example.com",
+			"provider": "cloudflare",
+			"cf_token": "restored-token-value",
+		},
+	}
+
+	rr := doRequest(t, srv, "POST", "/api/v1/backup/restore", payload, true)
+	if rr.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify DB
+	tc, _ := database.GetTLSConfig()
+	if tc.Mode != "acme" {
+		t.Errorf("expected restored mode 'acme', got %q", tc.Mode)
+	}
+	if tc.ACMEEmail == nil || *tc.ACMEEmail != "restored@example.com" {
+		t.Errorf("expected restored email, got %v", tc.ACMEEmail)
+	}
+	if tc.CFTokenEnc == nil || *tc.CFTokenEnc == "" {
+		t.Error("expected CF token to be re-encrypted after restore")
+	}
+}
