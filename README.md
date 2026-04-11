@@ -5,11 +5,14 @@
 SignPost sits between your local services (NAS, home automation, monitoring, Proxmox, TrueNAS, Synology, Unraid) and the internet, ensuring every outgoing email passes SPF, DKIM, and DMARC checks. No more emails landing in spam.
 
 - **Web Admin UI** -- Dashboard, domain management, DNS validation, setup wizard
+- **Let's Encrypt TLS** -- ACME DNS-01 via Cloudflare, configurable from the Dashboard
 - **DKIM Signing** -- Per-domain RSA-2048 keys, one-click generation
 - **DNS Awareness** -- Live SPF/DKIM/DMARC checks with fix suggestions
 - **Multiple Relay Methods** -- Gmail, ISP, direct delivery, or custom SMTP
-- **Authenticated Submission** -- Port 587 with per-user credentials
-- **Credential Encryption** -- AES-256-GCM at rest for relay passwords
+- **Three SMTP Ports** -- 25 (plaintext), 587 (STARTTLS), 465 (implicit TLS/SSL)
+- **Authenticated Submission** -- Ports 587/465 with per-user credentials
+- **Real-time Mail Logging** -- Live log capture from Maddy with search, filtering, queue visibility
+- **Credential Encryption** -- AES-256-GCM at rest for relay passwords and API tokens
 - **Single Container** -- Maddy + Go API + React UI, managed by s6-overlay
 
 ![SignPost Login](docs/images/screenshot.png)
@@ -29,8 +32,9 @@ services:
   signpost:
     image: ghcr.io/drose12/signpost:latest
     ports:
-      - "25:25"       # SMTP (local services)
-      - "587:587"     # Submission (authenticated)
+      - "25:25"       # SMTP (local services, no auth)
+      - "465:465"     # SMTPS (implicit TLS + auth)
+      - "587:587"     # Submission (STARTTLS + auth)
       - "8080:8080"   # Web UI
     volumes:
       - signpost-data:/data/signpost
@@ -64,16 +68,17 @@ Navigate to `http://your-server:8080`. Log in with username `admin` and the pass
 
 ## Docker Compose Examples
 
-### Minimal (just works)
+### Standard
 
 ```yaml
 services:
   signpost:
     image: ghcr.io/drose12/signpost:latest
     ports:
-      - "25:25"
-      - "587:587"
-      - "8080:8080"
+      - "25:25"         # SMTP (local services, no auth)
+      - "465:465"       # SMTPS (implicit TLS + auth)
+      - "587:587"       # Submission (STARTTLS + auth)
+      - "8080:8080"     # Web UI
     volumes:
       - signpost-data:/data/signpost
     environment:
@@ -86,7 +91,9 @@ volumes:
   signpost-data:
 ```
 
-### Full (all options)
+### Behind a Reverse Proxy (Nginx Proxy Manager, Traefik, etc.)
+
+Bind the web UI to localhost only -- your reverse proxy handles HTTPS for the UI:
 
 ```yaml
 services:
@@ -94,41 +101,14 @@ services:
     image: ghcr.io/drose12/signpost:latest
     ports:
       - "25:25"
+      - "465:465"
       - "587:587"
-      - "127.0.0.1:8080:8080"   # Bind web UI to localhost only
+      - "127.0.0.1:8080:8080"   # Web UI on localhost only
     volumes:
       - signpost-data:/data/signpost
     environment:
-      - SIGNPOST_ENV=prod
       - SIGNPOST_DOMAIN=drcs.ca
-      - SIGNPOST_SECRET_KEY=your-very-long-secret-key-at-least-32-characters
-      - SIGNPOST_ADMIN_PASS=strong-admin-password
-      - SIGNPOST_ADMIN_USER=admin
-      - SIGNPOST_HOSTNAME=mail.drcs.ca
-      - SIGNPOST_LOG_LEVEL=info
-    restart: unless-stopped
-
-volumes:
-  signpost-data:
-```
-
-### Behind Nginx Proxy Manager
-
-Bind the web UI to localhost and let your reverse proxy handle TLS termination:
-
-```yaml
-services:
-  signpost:
-    image: ghcr.io/drose12/signpost:latest
-    ports:
-      - "25:25"
-      - "587:587"
-      - "127.0.0.1:8080:8080"
-    volumes:
-      - signpost-data:/data/signpost
-    environment:
-      - SIGNPOST_ENV=prod
-      - SIGNPOST_DOMAIN=drcs.ca
+      - SIGNPOST_HOSTNAME=mail.drcs.ca      # Used for SMTP EHLO and TLS cert
       - SIGNPOST_SECRET_KEY=your-very-long-secret-key-at-least-32-characters
       - SIGNPOST_ADMIN_PASS=strong-admin-password
     restart: unless-stopped
@@ -137,30 +117,7 @@ volumes:
   signpost-data:
 ```
 
-In Nginx Proxy Manager, create a proxy host pointing to `http://your-server:8080` with SSL enabled.
-
-### Dockge / TrueNAS Scale
-
-Dockge requires all services in a single compose file without external networks. This configuration works as-is:
-
-```yaml
-services:
-  signpost:
-    image: ghcr.io/drose12/signpost:latest
-    ports:
-      - "25:25"
-      - "587:587"
-      - "8080:8080"
-    volumes:
-      - /mnt/pool/apps/signpost:/data/signpost
-    environment:
-      - SIGNPOST_DOMAIN=example.com
-      - SIGNPOST_SECRET_KEY=change-me-to-something-at-least-32-chars-long
-      - SIGNPOST_ADMIN_PASS=your-secure-admin-password
-    restart: unless-stopped
-```
-
-Note: Use a host path (`/mnt/pool/apps/signpost`) instead of a named volume if your orchestrator prefers it.
+> **Dockge / TrueNAS:** Use a host path (`/mnt/pool/apps/signpost:/data/signpost`) instead of a named volume if your orchestrator prefers it.
 
 ---
 
@@ -183,13 +140,14 @@ Note: Use a host path (`/mnt/pool/apps/signpost`) instead of a named volume if y
 
 ### Port Mapping
 
-| Port | Protocol | Purpose | Auth |
-|---|---|---|---|
-| 25 | SMTP | Local service mail submission | Network trust (no auth) |
-| 587 | SMTP | Authenticated submission | SMTP AUTH (per-user credentials) |
-| 8080 | HTTP | Web admin UI + REST API | HTTP Basic Auth |
+| Port | Protocol | TLS | Auth | Purpose |
+|---|---|---|---|---|
+| 25 | SMTP | None | Network trust | Local services (NAS, printers, etc.) |
+| 465 | SMTPS | Implicit TLS | SMTP AUTH | Clients with "SSL" checkbox (UDM Pro, etc.) |
+| 587 | Submission | STARTTLS | SMTP AUTH | Standard authenticated submission |
+| 8080 | HTTP | -- | Basic Auth | Web admin UI + REST API |
 
-> **Important:** Port 25 relies on network trust. Only expose it to your local/Docker network, never to the internet. Use port 587 with SMTP AUTH for authenticated access.
+> **Important:** Port 25 relies on network trust -- only expose to your local/Docker network. Ports 465 and 587 require SMTP user credentials. Enable ports 465/587 and SMTPS from the Dashboard.
 
 ---
 
@@ -199,13 +157,14 @@ Note: Use a host path (`/mnt/pool/apps/signpost`) instead of a named volume if y
 
 A React-based admin interface with:
 
-- **Dashboard** -- Service status, listener health, domain count, TLS info, recent activity
+- **Dashboard** -- Service status, listener health, SMTP port toggles (25/465/587), TLS management with cert details
 - **Domain Management** -- Add/remove domains, per-domain DKIM keys and relay config
 - **DNS Records** -- View required records with copy-to-clipboard, live validation
 - **Setup Wizard** -- Step-by-step first-run configuration
-- **Mail Log** -- Filterable log of sent/failed messages
-- **SMTP Users** -- Manage port 587 submission credentials
-- **TLS Management** -- Self-signed certificate generation, certificate status
+- **Mail Log** -- Real-time log with search, date filtering, status badges, queue visibility
+- **SMTP Users** -- Manage submission credentials for ports 587/465
+- **TLS Management** -- Self-signed or Let's Encrypt (ACME DNS-01), cert details, renewal
+- **Backup/Restore** -- Full system backup including domains, DKIM keys, relay configs, SMTP users, TLS config
 - **Dark Mode** -- System-aware theme toggle
 
 ### DKIM Signing
@@ -249,10 +208,13 @@ SignPost supports four relay methods, configurable per domain:
 
 ### TLS
 
-- **Self-signed certificates** auto-generated at startup for the configured hostname
-- Certificates stored in `/data/signpost/tls/`
-- Regenerate from the Dashboard's TLS card or via API
-- Manual certificate support (mount your own cert/key files)
+- **Let's Encrypt** -- ACME DNS-01 via Cloudflare, configured from the Dashboard TLS card
+- **Self-signed certificates** -- auto-generated at startup as default, switchable from the Dashboard
+- Certificate details displayed on Dashboard: issuer, subject, SANs, expiry, days remaining
+- Cloudflare API token stored encrypted in DB (AES-256-GCM), included in backup/restore
+- Maddy handles certificate renewal automatically (30 days before expiry)
+- Renew Now button for manual renewal
+- Configurable mail hostname (`SIGNPOST_HOSTNAME` env var or via Dashboard)
 
 ### Credential Encryption
 
@@ -307,15 +269,15 @@ Local Service --> SMTP :25 --> Maddy (DKIM sign) --> msmtpd :2500 --> msmtp (LOG
 Local Service --> SMTP :25 --> Maddy (DKIM sign) --> MX lookup --> Recipient server
 ```
 
-**Authenticated submission (port 587):**
+**Authenticated submission (port 587 STARTTLS / port 465 implicit TLS):**
 
 ```
-Remote Client --> Submission :587 (SMTP AUTH) --> Maddy (DKIM sign) --> Relay/Direct --> Recipient
+Remote Client --> Submission :587/:465 (SMTP AUTH + TLS) --> Maddy (DKIM sign) --> Relay/Direct --> Recipient
 ```
 
 ### How DKIM Signing Works
 
-1. Local service sends email to SignPost on port 25 (or 587 with auth)
+1. Local service sends email to SignPost on port 25 (or 587/465 with auth)
 2. Maddy matches the sender domain to a configured domain
 3. Maddy signs the message with the domain's RSA-2048 private key
 4. The signed message includes a `DKIM-Signature` header
@@ -489,15 +451,15 @@ curl -u admin:pass http://localhost:8080/api/v1/status
 
 ```json
 {
-  "version": "v0.4.0",
+  "version": "v0.11.1",
   "domain_count": 1,
-  "tls_mode": "self-signed",
-  "tls_cert_expiry": "2027-03-29T00:00:00Z",
-  "schema_version": 6,
+  "tls_mode": "acme",
+  "schema_version": 10,
   "maddy_status": "running",
   "listeners": [
     {"name": "SMTP", "bind": "0.0.0.0:25", "status": "running"},
-    {"name": "Submission", "bind": "0.0.0.0:587", "status": "running"},
+    {"name": "Submission (STARTTLS)", "bind": "0.0.0.0:587", "status": "running"},
+    {"name": "SMTPS (implicit TLS)", "bind": "0.0.0.0:465", "status": "running"},
     {"name": "HTTP API", "bind": "0.0.0.0:8080", "status": "running"}
   ]
 }
@@ -750,7 +712,8 @@ curl -u admin:pass -X PUT http://localhost:8080/api/v1/settings \
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| GET | `/api/v1/tls` | Yes | Get TLS config (mode, cert paths, expiry) |
+| GET | `/api/v1/tls` | Yes | Get TLS config, cert details (issuer, SANs, expiry, days remaining) |
+| PUT | `/api/v1/tls` | Yes | Update TLS mode, ACME email, CF token, hostname |
 | POST | `/api/v1/tls/generate-selfsigned` | Yes | Regenerate self-signed certificate |
 
 ### Network
@@ -832,15 +795,18 @@ curl -u admin:pass -X POST http://localhost:8080/api/v1/test/send \
 # Go is at /usr/local/go/bin (add to PATH if needed)
 export PATH=$PATH:/usr/local/go/bin
 
-# All Go tests (100+ tests across 6 packages)
+# All Go tests (139+ tests across 8 packages)
 CGO_ENABLED=1 go test -race ./internal/...
 
 # Specific package
 go test -v ./internal/db/
 go test -v ./internal/api/
-go test -v ./internal/dkim/
 go test -v ./internal/config/
 go test -v ./internal/crypto/
+go test -v ./internal/dkim/
+go test -v ./internal/logtail/
+go test -v ./internal/queue/
+go test -v ./internal/tls/
 
 # Frontend tests
 cd web && npx vitest run
@@ -873,6 +839,8 @@ signpost/
     crypto/               # AES-256-GCM credential encryption
     db/                   # SQLite database, migrations, queries
     dkim/                 # RSA key generation, DNS record builders
+    logtail/              # Real-time Maddy log parser and event mapper
+    queue/                # Maddy queue scanner with thread-safe caching
     tls/                  # Self-signed certificate generation
   web/                    # React frontend (Vite + TypeScript + Tailwind + shadcn/ui)
   templates/              # Maddy config template (maddy.conf.tmpl)
