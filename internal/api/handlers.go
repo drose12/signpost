@@ -90,9 +90,26 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	listeners := []map[string]string{
 		{"name": "SMTP", "bind": "0.0.0.0:" + smtpPort, "status": maddyStatus},
-		{"name": "Submission", "bind": "0.0.0.0:" + submissionPort, "status": maddyStatus},
+		{"name": "Submission (STARTTLS)", "bind": "0.0.0.0:" + submissionPort, "status": maddyStatus},
 		{"name": "HTTP API", "bind": "0.0.0.0:" + httpPort, "status": "running"},
 	}
+
+	// Show SMTPS listener if enabled
+	smtpsEnabled, _ := s.db.GetSetting("smtps_enabled")
+	if smtpsEnabled == "true" {
+		smtpsPort, _ := s.db.GetSetting("smtps_port")
+		if smtpsPort == "" {
+			smtpsPort = "465"
+		}
+		smtpsStatus := "stopped"
+		smtpsConn, smtpsErr := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", smtpsPort), 500*time.Millisecond)
+		if smtpsErr == nil {
+			smtpsConn.Close()
+			smtpsStatus = "running"
+		}
+		listeners = append(listeners, map[string]string{"name": "SMTPS (implicit TLS)", "bind": "0.0.0.0:" + smtpsPort, "status": smtpsStatus})
+	}
+
 	// Only show msmtpd if it's actually running (LOGIN relay active)
 	if msmtpdRunning {
 		listeners = append(listeners, map[string]string{"name": "msmtpd (LOGIN relay)", "bind": "127.0.0.1:2500", "status": "running"})

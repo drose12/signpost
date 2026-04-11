@@ -313,7 +313,8 @@ function SMTPPortsCard() {
       setToggling(key);
       await api.put('/settings', { [key]: newValue });
       setSettings((prev) => ({ ...prev, [key]: newValue }));
-      toast.success(`${key === 'smtp_enabled' ? 'Port 25 (SMTP)' : 'Port 587 (Submission)'} ${newValue === 'true' ? 'enabled' : 'disabled'}`);
+      const labels: Record<string, string> = { smtp_enabled: 'Port 25 (SMTP)', submission_enabled: 'Port 587 (Submission)', smtps_enabled: 'Port 465 (SMTPS)' };
+      toast.success(`${labels[key] || key} ${newValue === 'true' ? 'enabled' : 'disabled'}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update setting';
       toast.error(msg);
@@ -326,6 +327,7 @@ function SMTPPortsCard() {
 
   const smtpEnabled = settings.smtp_enabled !== 'false';
   const submissionEnabled = settings.submission_enabled === 'true';
+  const smtpsEnabled = settings.smtps_enabled === 'true';
 
   return (
     <Card className="dark:bg-slate-800">
@@ -361,6 +363,29 @@ function SMTPPortsCard() {
           <Switch
             checked={submissionEnabled}
             onCheckedChange={() => toggle('submission_enabled', submissionEnabled)}
+            disabled={toggling !== null}
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div>
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                Port 465 (SMTPS)
+                {smtpsEnabled && userCount > 0 && (
+                  <span className="text-xs font-normal text-green-600 dark:text-green-400 ml-2">({userCount} user{userCount !== 1 ? 's' : ''} configured)</span>
+                )}
+              </p>
+              {smtpsEnabled && userCount === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">No users — <a href="/smtp-users" className="underline">add one</a></p>
+              )}
+              {!smtpsEnabled && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">Implicit TLS, SMTP AUTH (SSL checkbox clients)</p>
+              )}
+            </div>
+          </div>
+          <Switch
+            checked={smtpsEnabled}
+            onCheckedChange={() => toggle('smtps_enabled', smtpsEnabled)}
             disabled={toggling !== null}
           />
         </div>
