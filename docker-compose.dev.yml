@@ -13,4 +13,5 @@ services:
       - SIGNPOST_SECRET_KEY=${SIGNPOST_SECRET_KEY:-dev-secret-key-minimum-32-characters-long}
       - SIGNPOST_ADMIN_PASS=${SIGNPOST_ADMIN_PASS:-admin}
       - SIGNPOST_ADMIN_USER=${SIGNPOST_ADMIN_USER:-admin}
+      - SIGNPOST_HOSTNAME=${SIGNPOST_HOSTNAME:-maildev.drcs.ca}
       - SIGNPOST_LOG_LEVEL=debug

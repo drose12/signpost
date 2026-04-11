@@ -56,8 +56,11 @@ func main() {
 		log.Printf("WARNING: Failed to get TLS config: %v", err)
 	}
 	if tlsConfig != nil && (tlsConfig.Mode == "self-signed" || tlsConfig.Mode == "") {
-		hostname := envOrDefault("SIGNPOST_DOMAIN", "localhost")
-		certPath, keyPath, certErr := selfsigned.EnsureSelfSignedCert(dataDir, "mail."+hostname)
+		certHostname := envOrDefault("SIGNPOST_HOSTNAME", "")
+		if certHostname == "" {
+			certHostname = "mail." + envOrDefault("SIGNPOST_DOMAIN", "localhost")
+		}
+		certPath, keyPath, certErr := selfsigned.EnsureSelfSignedCert(dataDir, certHostname)
 		if certErr != nil {
 			log.Printf("WARNING: Failed to generate self-signed cert: %v", certErr)
 		} else {
@@ -121,7 +124,10 @@ func main() {
 
 	// Start API server
 	webPort := envOrDefault("SIGNPOST_WEB_PORT", "8080")
-	hostname := "mail." + envOrDefault("SIGNPOST_DOMAIN", "localhost")
+	hostname := envOrDefault("SIGNPOST_HOSTNAME", "")
+	if hostname == "" {
+		hostname = "mail." + envOrDefault("SIGNPOST_DOMAIN", "localhost")
+	}
 	srv := api.NewServer(database, configGen, keysDir, adminUser, adminPass, secretKey, dataDir, hostname, version, queueScanner, web.DistFS)
 
 	log.Printf("Starting web server on :%s", webPort)
