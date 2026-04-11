@@ -21,17 +21,19 @@ tls off
 {{- else if eq .TLS.Mode "manual"}}
 tls file {{.TLS.CertPath}} {{.TLS.KeyPath}}
 {{- else if eq .TLS.Mode "acme"}}
-tls.loader.acme acme_tls {
-    email {{.TLS.ACMEEmail}}
-    agreed
-    challenge dns-01
-    {{- if eq .TLS.ACMEProvider "cloudflare"}}
-    dns cloudflare {
-        api_token "{{.TLS.CFToken}}"
+tls {
+    loader acme {
+        hostname {{.Hostname}}
+        email {{.TLS.ACMEEmail}}
+        agreed
+        challenge dns-01
+        {{- if eq .TLS.ACMEProvider "cloudflare"}}
+        dns cloudflare {
+            api_token "{{.TLS.CFToken}}"
+        }
+        {{- end}}
     }
-    {{- end}}
 }
-tls &acme_tls
 {{- end}}
 
 ## ---------------------------------------------------------------

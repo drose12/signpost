@@ -1185,6 +1185,13 @@ func (s *Server) handleGetTLS(w http.ResponseWriter, r *http.Request) {
 	if tlsConfig.CertPath != nil {
 		certPath = *tlsConfig.CertPath
 	}
+	// For ACME mode, check Maddy's certificate storage
+	if tlsConfig.Mode == "acme" && s.dataDir != "" {
+		acmeCert := s.dataDir + "/maddy_state/acme/certificates/acme-v02.api.letsencrypt.org-directory/" + s.hostname + "/" + s.hostname + ".crt"
+		if _, err := os.Stat(acmeCert); err == nil {
+			certPath = acmeCert
+		}
+	}
 
 	if certPath != "" {
 		if info, err := parseCertFile(certPath); err == nil {
