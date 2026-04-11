@@ -64,7 +64,7 @@ ENV SIGNPOST_DATA_DIR=/data/signpost \
     SIGNPOST_LOG_LEVEL=info
 
 # Expose ports
-EXPOSE 25 587 8080
+EXPOSE 25 465 587 8080
 
 # Health check — verifies both HTTP API and SMTP port
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

@@ -102,7 +102,7 @@ target.queue remote_queue {
 {{- end}}
 
 ## ---------------------------------------------------------------
-## Authentication for submission port
+## Authentication for submission ports (587, 465)
 ## ---------------------------------------------------------------
 {{- if .SMTPUsers}}
 
@@ -175,12 +175,70 @@ smtp tcp://0.0.0.0:{{.SMTPPort}} {
 {{- end}}
 
 ## ---------------------------------------------------------------
-## Submission endpoint - authenticated (port {{.SubmissionPort}})
+## Submission endpoint - STARTTLS (port {{.SubmissionPort}})
 ## Only enabled when submission is enabled and SMTP users exist.
 ## ---------------------------------------------------------------
 {{- if .SubmissionEnabled}}
 
 submission tcp://0.0.0.0:{{.SubmissionPort}} {
+    limits {
+        all rate 50 1s
+        all concurrency 20
+    }
+
+    auth &local_auth
+
+    {{- range $i, $d := .Domains}}
+    {{- if $d.Active}}
+
+    source {{$d.Name}} {
+        check {
+            command /app/scripts/add-from-header.sh {sender} {
+                run_on body
+                code 1 reject
+            }
+        }
+        {{- if $d.DKIMKeyPath}}
+        modify {
+            dkim {
+                domains {{$d.Name}}
+                selector {{$d.DKIMSelector}}
+                key_path {{$d.DKIMKeyPath}}
+            }
+        }
+        {{- end}}
+        {{- if $d.Relay}}
+        destination {{$d.Name}} {
+            deliver_to &remote_queue
+        }
+        {{- end}}
+        default_destination {
+            {{- if $d.Relay}}
+            deliver_to &relay_{{$i}}
+            {{- else}}
+            deliver_to &remote_queue
+            {{- end}}
+        }
+    }
+    {{- end}}
+    {{- end}}
+
+    default_source {
+        default_destination {
+            reject 550 5.7.1 "Sender domain not configured in SignPost"
+        }
+    }
+}
+{{- end}}
+
+## ---------------------------------------------------------------
+## SMTPS endpoint - implicit TLS (port {{.SMTPSPort}})
+## For clients that use "SSL" checkbox (e.g. UniFi UDM Pro).
+## Only enabled when SMTPS is enabled and SMTP users exist.
+## ---------------------------------------------------------------
+{{- if .SMTPSEnabled}}
+
+submission tls://0.0.0.0:{{.SMTPSPort}} {
     limits {
         all rate 50 1s
         all concurrency 20

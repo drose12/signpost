@@ -178,6 +178,8 @@ var migrations = []string{
 	`ALTER TABLE tls_config ADD COLUMN cf_token_enc TEXT;
 	 ALTER TABLE tls_config ADD COLUMN cf_token_nonce TEXT;`,
 
-	// Migration 10: Add mail_hostname setting for configurable SMTP/cert hostname.
-	`INSERT OR IGNORE INTO settings (key, value) VALUES ('mail_hostname', '');`,
+	// Migration 10: Add mail_hostname and SMTPS settings.
+	`INSERT OR IGNORE INTO settings (key, value) VALUES ('mail_hostname', '');
+	 INSERT OR IGNORE INTO settings (key, value) VALUES ('smtps_enabled', 'false');
+	 INSERT OR IGNORE INTO settings (key, value) VALUES ('smtps_port', '465');`,
 }

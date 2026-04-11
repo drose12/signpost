@@ -19,8 +19,10 @@ type TemplateData struct {
 	PrimaryDomain       string
 	SMTPPort            string
 	SubmissionPort      string
+	SMTPSPort           string
 	SMTPEnabled         bool
 	SubmissionEnabled   bool
+	SMTPSEnabled        bool
 	NetworkTrustEnabled bool
 	NetworkTrustCIDRs   string
 	TLS                 TLSData
@@ -248,8 +250,10 @@ func (g *Generator) buildTemplateData(database *db.DB, decryptPassword func(enc,
 		PrimaryDomain:       primaryDomain,
 		SMTPPort:            getOr(settings, "smtp_port", "25"),
 		SubmissionPort:      getOr(settings, "submission_port", "587"),
+		SMTPSPort:           getOr(settings, "smtps_port", "465"),
 		SMTPEnabled:         getOr(settings, "smtp_enabled", "true") == "true",
 		SubmissionEnabled:   getOr(settings, "submission_enabled", "false") == "true" && userCount > 0,
+		SMTPSEnabled:        getOr(settings, "smtps_enabled", "false") == "true" && userCount > 0,
 		NetworkTrustEnabled: getOr(settings, "network_trust_enabled", "true") == "true",
 		NetworkTrustCIDRs:   getOr(settings, "network_trust_cidrs", "172.16.0.0/12,127.0.0.1/8"),
 	}

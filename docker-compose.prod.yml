@@ -3,6 +3,7 @@ services:
     image: ghcr.io/drose12/signpost:latest
     ports:
       - "25:25"
+      - "465:465"
       - "587:587"
       - "127.0.0.1:8080:8080"  # Web UI bound to localhost, accessed via reverse proxy
     volumes:
