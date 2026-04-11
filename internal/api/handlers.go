@@ -1258,15 +1258,22 @@ func (s *Server) handleUpdateTLS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Default provider to cloudflare
+	// Preserve existing ACME settings when switching modes
+	existing, _ := s.db.GetTLSConfig()
+	email := req.Email
+	if email == nil && existing != nil {
+		email = existing.ACMEEmail
+	}
 	provider := "cloudflare"
 	if req.Provider != nil {
 		provider = *req.Provider
+	} else if existing != nil && existing.ACMEProvider != nil {
+		provider = *existing.ACMEProvider
 	}
 	providerPtr := &provider
 
 	// Update TLS config in DB
-	if err := s.db.UpdateTLSConfig(req.Mode, req.Email, providerPtr, nil, nil); err != nil {
+	if err := s.db.UpdateTLSConfig(req.Mode, email, providerPtr, nil, nil); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
