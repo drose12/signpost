@@ -114,7 +114,8 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 1. **ISP RBL block** — Home IP `206.45.58.220` was blacklisted by MTS. Direct delivery works again as of v0.7.0 testing. May recur with high SMTP volume.
 2. **Integration tests** — Phase 1.7 not started. Need Testcontainers.
 3. **Config reload race** — Rapid API calls can cause double SIGHUP. s6 handles it but could debounce.
-4. **Let's Encrypt ACME** — Phase 3.1, not started. Self-signed certs work for now.
+4. **Configurable hostname in GUI** — `mail_hostname` setting exists but needs to trigger ACME re-acquisition when changed. Currently requires container restart to pick up new hostname for cert.
+5. **README/docs update** — Need to document ACME setup, SMTPS port 465, TLS management UI, and port configuration.
 
 ## Current Version
 
@@ -151,8 +152,10 @@ Only commit code when changes are ready. Do not rebuild the container on every f
 ## How to Pick Up
 
 1. Read this file
-2. Run `CGO_ENABLED=1 go test -race ./internal/...` to verify Go tests (100+ tests across 6 packages)
+2. Run `CGO_ENABLED=1 go test -race ./internal/...` to verify Go tests (139+ tests across 8 packages)
 3. Run `cd web && npx vitest run` to verify frontend tests (5 tests)
-6. **Phase 2 Web UI is complete.** Next priorities:
+4. **Phase 3.1 TLS is complete.** Next priorities:
    - Phase 1.7: Integration tests (Testcontainers)
-   - Phase 3: TLS & Security (ACME, security audit page)
+   - Phase 3.3: Security audit page
+   - Phase 3.5: Security tests
+   - README/docs update for ACME, SMTPS, TLS management
