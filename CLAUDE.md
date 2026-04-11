@@ -65,8 +65,8 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Environments
 
-- **Dev:** Local WSL Ubuntu Docker (self-signed TLS, network trust, `docker-compose.dev.yml`)
-- **Prod:** ubuntu01.drcs.ca (LE certs via Cloudflare DNS-01, behind nginx proxy manager, `docker-compose.prod.yml`)
+- **Dev:** Local Win 11 WSL Ubuntu + Docker Desktop, IP `192.168.1.19` (self-signed TLS, network trust, `docker-compose.dev.yml`, healthz at `localhost:8081`)
+- **Prod:** `root@ubuntu01.drcs.ca`, Docker (ghcr.io/drose12/signpost:latest, `docker-compose.prod.yml`, behind nginx proxy manager). **Not yet deployed** — needs initial setup with `.env` and compose file.
 
 ## Implementation Status
 
@@ -109,11 +109,6 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 - [x] 4.4: Release automation (tag → ghcr.io → GitHub Release)
 - [ ] 4.5: Production hardening (version pinning strategy, upgrade-test CI job, Dependabot → integration test gate)
 
-## Environments
-
-- **Dev:** Local WSL Ubuntu Docker (self-signed TLS, network trust, `docker-compose.dev.yml`)
-- **Prod:** TrueNAS Dockge (ghcr.io/drose12/signpost, `192.168.10.14` on appsnet)
-
 ## Known Issues / TODOs for Next Session
 
 1. **ISP RBL block** — Home IP `206.45.58.220` was blacklisted by MTS. Direct delivery works again as of v0.7.0 testing. May recur with high SMTP volume.
@@ -123,18 +118,31 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.9.0 — real-time mail logging, queue visibility, relay queue wrapping
+v0.10.0 — logout button
 
 ## Deployment Process
 
-**DO NOT auto-deploy after every change.** Wait for the user to say "deploy to dev", then:
+**DO NOT auto-deploy after every change.** Wait for the user to say "deploy", then:
 
+### Pre-deploy (both environments)
 1. Run all Go tests: `CGO_ENABLED=1 go test -race ./internal/...`
 2. Run frontend tests: `cd web && npx vitest run`
 3. Run frontend build: `cd web && npm run build`
-4. If tests/build pass: bump version in `cmd/signpost/main.go`, commit, tag
-5. Deploy: `docker compose -f docker-compose.dev.yml up --build -d`
-6. Verify: `curl http://localhost:8081/api/v1/healthz`
+4. If tests/build pass: bump version in `cmd/signpost/main.go`
+5. Add release notes to `CHANGELOG.md` (Keep a Changelog format)
+6. Commit, tag, push with `--tags`
+7. Update GitHub Release notes: `gh release edit <tag> --notes "..."`
+
+### Dev (local WSL Docker Desktop)
+1. `docker compose -f docker-compose.dev.yml up --build -d`
+2. Verify: `curl http://localhost:8081/api/v1/healthz`
+
+### Prod (ubuntu01.drcs.ca)
+1. Wait for GitHub Actions Release workflow to finish: `gh run watch <run-id>`
+2. SSH and pull: `ssh root@ubuntu01.drcs.ca "cd /opt/signpost && docker compose pull && docker compose up -d"`
+3. Verify: `ssh root@ubuntu01.drcs.ca "curl -s http://localhost:8080/api/v1/healthz"`
+
+**Note:** Prod is not yet set up on ubuntu01. First deployment requires creating `/opt/signpost/` with `docker-compose.prod.yml` and `.env` file.
 
 Only commit code when changes are ready. Do not rebuild the container on every file change.
 
