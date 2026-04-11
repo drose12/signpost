@@ -1,5 +1,5 @@
 import { NavLink, Link } from 'react-router-dom';
-import { LayoutDashboard, Globe, Mail, Users, Wand2, Sun, Moon, Info } from 'lucide-react';
+import { LayoutDashboard, Globe, Mail, Users, Wand2, Sun, Moon, Info, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import type { StatusResponse } from '../types';
@@ -13,7 +13,7 @@ const navItems = [
   { to: '/wizard', icon: Wand2, label: 'Setup Wizard' },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onLogout }: { onLogout: () => void }) {
   const [theme, setThemeState] = useState(getTheme());
   const [version, setVersion] = useState('');
 
@@ -73,8 +73,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* About */}
-      <div className="px-4 py-4 border-t border-slate-700">
+      {/* Footer */}
+      <div className="px-4 py-4 border-t border-slate-700 space-y-2">
         <NavLink
           to="/about"
           className={({ isActive }) =>
@@ -86,6 +86,13 @@ export function Sidebar() {
           <Info className="w-4 h-4" />
           About
         </NavLink>
+        <button
+          onClick={onLogout}
+          className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors w-full"
+        >
+          <LogOut className="w-4 h-4" />
+          Logout
+        </button>
       </div>
     </aside>
   );

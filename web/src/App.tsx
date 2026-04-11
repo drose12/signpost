@@ -11,13 +11,18 @@ import { Wizard } from './pages/Wizard';
 import { SMTPUsers } from './pages/SMTPUsers';
 import { ReleaseNotes } from './pages/ReleaseNotes';
 import { About } from './pages/About';
-import { hasCredentials } from './api';
+import { hasCredentials, clearCredentials } from './api';
 import { initTheme } from './theme';
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(hasCredentials());
 
   useEffect(() => { initTheme(); }, []);
+
+  function handleLogout() {
+    clearCredentials();
+    setLoggedIn(false);
+  }
 
   if (!loggedIn) {
     return <LoginDialog onLogin={() => setLoggedIn(true)} />;
@@ -27,7 +32,7 @@ export default function App() {
     <BrowserRouter>
       <Toaster position="top-right" />
       <Routes>
-        <Route element={<Layout />}>
+        <Route element={<Layout onLogout={handleLogout} />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/domains" element={<Domains />} />
           <Route path="/logs" element={<MailLog />} />
