@@ -95,7 +95,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 - [x] 2.12: Final integration verification (Docker build, SPA served, all APIs working)
 
 ### Phase 3 — TLS & Security (in progress)
-- [ ] 3.1: Let's Encrypt ACME DNS-01 via Cloudflare
+- [x] 3.1: Let's Encrypt ACME DNS-01 via Cloudflare, SMTPS port 465, TLS management UI
 - [x] 3.2: TLS — self-signed cert generation at startup, TLS management card on Dashboard
 - [ ] 3.3: Security audit page
 - [x] 3.4: SMTP user management — CRUD UI, bcrypt hashing (bcrypt: prefix for Maddy), port 587 control
@@ -118,7 +118,7 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Current Version
 
-v0.10.3 — disable TLS on port 25, inject missing From header
+v0.11.0 — Let's Encrypt ACME, SMTPS port 465, TLS management UI
 
 ## Deployment Process
 

@@ -5,6 +5,23 @@ All notable changes to SignPost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-04-11
+
+### Added
+- Let's Encrypt ACME DNS-01 via Cloudflare — switch from self-signed to real TLS certs from the Dashboard TLS card
+- SMTPS port 465 with implicit TLS — for clients with "SSL" checkbox (UniFi UDM Pro, NAS devices, printers)
+- TLS certificate details on Dashboard — issuer, subject, SANs, expiry date, days remaining with color indicator
+- Configurable mail hostname — set the SMTP identity and cert subject from the TLS card or SIGNPOST_HOSTNAME env var
+- Cloudflare API token stored encrypted in DB (AES-256-GCM) — configurable via GUI, included in backup/restore
+- Renew Now button for manual certificate renewal
+- 13 new tests covering TLS mode switching, token encryption, cert parsing, and backup/restore
+
+### Fixed
+- Maddy ACME config uses inline `tls { loader acme { } }` syntax (required by Maddy v0.9.2)
+- ACME settings (email, token) preserved when switching between TLS modes
+- Inject missing `From` header for RFC 5322 compliance (devices like UDM Pro)
+- Disable TLS on port 25 (local SMTP) — prevents STARTTLS failures with self-signed certs
+
 ## [0.10.3] - 2026-04-11
 
 ### Fixed
