@@ -9,7 +9,7 @@ A Docker-based local SMTP relay that DKIM-signs outgoing mail and relays through
 - **Stack:** Maddy (mail server) + Go (backend API) + React/Vite/Tailwind/shadcn (frontend) + SQLite
 - **Container:** Single Docker container with s6-overlay managing Maddy + Go web app
 - **Owner:** drose, domain drcs.ca on Cloudflare DNS, Gmail-hosted email
-- **Prod server:** root@ubuntu01.drcs.ca
+- **Prod server:** TrueNAS at `192.168.1.2` (aka `truenas.drcs.ca`), SSH as root, Dockge for GUI mgmt
 - **Repo:** github.com/drose12/signpost (public)
 
 ## Key Files
@@ -65,8 +65,8 @@ curl -u admin:yourpass http://localhost:8080/api/v1/domains
 
 ## Environments
 
-- **Dev:** Local Win 11 WSL Ubuntu + Docker Desktop, IP `192.168.1.19` (self-signed TLS, network trust, `docker-compose.dev.yml`, healthz at `localhost:8081`)
-- **Prod:** `root@ubuntu01.drcs.ca`, Docker (ghcr.io/drose12/signpost:latest, `docker-compose.prod.yml`, behind nginx proxy manager). **Not yet deployed** — needs initial setup with `.env` and compose file.
+- **Dev:** Local Win 11 WSL Ubuntu + Docker Desktop, IP `192.168.1.19` (self-signed TLS, network trust, `docker-compose.dev.yml`, healthz at `localhost:8081`). Proxied via Nginx Proxy Manager with LE cert → `http://192.168.1.19:8081`
+- **Prod:** TrueNAS at `192.168.1.2` (aka `truenas.drcs.ca`), SSH as `root@truenas.drcs.ca`. Container runs as standalone `docker run` (not compose), image `ghcr.io/drose12/signpost:latest`. Dockge available for GUI management. Proxied via Nginx Proxy Manager with LE cert → `http://192.168.1.2:8080`.
 
 ## Implementation Status
 
@@ -137,12 +137,10 @@ v0.10.1 — security patch (vite, hono CVEs)
 1. `docker compose -f docker-compose.dev.yml up --build -d`
 2. Verify: `curl http://localhost:8081/api/v1/healthz`
 
-### Prod (ubuntu01.drcs.ca)
+### Prod (TrueNAS — truenas.drcs.ca / 192.168.1.2)
 1. Wait for GitHub Actions Release workflow to finish: `gh run watch <run-id>`
-2. SSH and pull: `ssh root@ubuntu01.drcs.ca "cd /opt/signpost && docker compose pull && docker compose up -d"`
-3. Verify: `ssh root@ubuntu01.drcs.ca "curl -s http://localhost:8080/api/v1/healthz"`
-
-**Note:** Prod is not yet set up on ubuntu01. First deployment requires creating `/opt/signpost/` with `docker-compose.prod.yml` and `.env` file.
+2. Pull and restart: `ssh root@truenas.drcs.ca "docker pull ghcr.io/drose12/signpost:latest && docker restart signpost"`
+3. Verify: `ssh root@truenas.drcs.ca "curl -s http://localhost:8080/api/v1/healthz"`
 
 Only commit code when changes are ready. Do not rebuild the container on every file change.
 
