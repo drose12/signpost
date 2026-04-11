@@ -137,14 +137,14 @@ v0.11.1 — SMTPS 465 toggle on Dashboard
 1. `docker compose -f docker-compose.dev.yml up --build -d`
 2. Verify: `curl http://localhost:8081/api/v1/healthz`
 
-### Prod (TrueNAS — truenas.drcs.ca / 192.168.1.2)
+### Prod (TrueNAS — truenas.drcs.ca / 192.168.1.2, Dockge-managed)
 1. Wait for GitHub Actions Release workflow to finish: `gh run watch <run-id>`
-2. Pull new image: `ssh root@truenas.drcs.ca "docker pull ghcr.io/drose12/signpost:latest"`
-3. Recreate container (**docker restart is not enough** — it reuses the old image):
+2. Pull and recreate via Dockge compose:
    ```
-   ssh root@truenas.drcs.ca "docker stop signpost && docker rm signpost && docker run -d --name signpost --restart unless-stopped -p 25:25 -p 587:587 -p 8080:8080 -v signpost_signpost-data:/data/signpost -e SIGNPOST_ADMIN_USER=admin -e SIGNPOST_ADMIN_PASS=dBbVvLAcHu3dAaa9FEnc -e SIGNPOST_ENV=prod -e SIGNPOST_DOMAIN=drcs.ca -e SIGNPOST_SECRET_KEY=Q4mZ8tN1xK7pR2vH9cL5yW3dS6jF0bTu ghcr.io/drose12/signpost:latest"
+   ssh root@truenas.drcs.ca "cd /mnt/.ix-apps/app_mounts/dockge/stacks/signpost && docker compose pull && docker compose up -d"
    ```
-4. Verify: `ssh root@truenas.drcs.ca "curl -s http://localhost:8080/api/v1/healthz"`
+3. Verify: `ssh root@truenas.drcs.ca "curl -s http://localhost:8080/api/v1/healthz"`
+4. Can also update/restart from Dockge UI at dockge.drcs.ca
 
 Only commit code when changes are ready. Do not rebuild the container on every file change.
 
