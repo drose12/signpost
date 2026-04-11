@@ -223,7 +223,11 @@ func (g *Generator) buildTemplateData(database *db.DB, decryptPassword func(enc,
 		return nil, fmt.Errorf("getting TLS config: %w", err)
 	}
 
-	hostname := envOrDefault("SIGNPOST_HOSTNAME", "")
+	// Hostname priority: DB setting > SIGNPOST_HOSTNAME env > mail.{SIGNPOST_DOMAIN}
+	hostname := getOr(settings, "mail_hostname", "")
+	if hostname == "" {
+		hostname = envOrDefault("SIGNPOST_HOSTNAME", "")
+	}
 	primaryDomain := envOrDefault("SIGNPOST_DOMAIN", "")
 	if hostname == "" && primaryDomain != "" {
 		hostname = "mail." + primaryDomain

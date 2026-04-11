@@ -1180,6 +1180,13 @@ func (s *Server) handleGetTLS(w http.ResponseWriter, r *http.Request) {
 	}
 	resp["has_cf_token"] = tlsConfig.CFTokenEnc != nil && *tlsConfig.CFTokenEnc != ""
 
+	// Include mail hostname
+	mailHostname, _ := s.db.GetSetting("mail_hostname")
+	if mailHostname == "" {
+		mailHostname = s.hostname
+	}
+	resp["hostname"] = mailHostname
+
 	// Find the cert file to parse
 	certPath := ""
 	if tlsConfig.CertPath != nil {
@@ -1187,7 +1194,7 @@ func (s *Server) handleGetTLS(w http.ResponseWriter, r *http.Request) {
 	}
 	// For ACME mode, check Maddy's certificate storage
 	if tlsConfig.Mode == "acme" && s.dataDir != "" {
-		acmeCert := s.dataDir + "/maddy_state/acme/certificates/acme-v02.api.letsencrypt.org-directory/" + s.hostname + "/" + s.hostname + ".crt"
+		acmeCert := s.dataDir + "/maddy_state/acme/certificates/acme-v02.api.letsencrypt.org-directory/" + mailHostname + "/" + mailHostname + ".crt"
 		if _, err := os.Stat(acmeCert); err == nil {
 			certPath = acmeCert
 		}
@@ -1220,10 +1227,16 @@ func (s *Server) handleUpdateTLS(w http.ResponseWriter, r *http.Request) {
 		Email    *string `json:"email"`
 		Provider *string `json:"provider"`
 		CFToken  *string `json:"cf_token"`
+		Hostname *string `json:"hostname"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	// Save hostname if provided
+	if req.Hostname != nil {
+		s.db.SetSetting("mail_hostname", *req.Hostname)
 	}
 
 	if req.Mode != "self-signed" && req.Mode != "acme" {

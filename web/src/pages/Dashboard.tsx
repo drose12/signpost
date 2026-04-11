@@ -132,6 +132,7 @@ function TLSStatusCard() {
   const [tlsInfo, setTlsInfo] = useState<TLSResponse | null>(null);
   const [mode, setMode] = useState('self-signed');
   const [email, setEmail] = useState('');
+  const [mailHostname, setMailHostname] = useState('');
   const [cfToken, setCfToken] = useState('');
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -142,6 +143,7 @@ function TLSStatusCard() {
       setTlsInfo(info);
       setMode(info.mode);
       setEmail(info.acme_email || '');
+      setMailHostname(info.hostname || '');
     } catch { /* ignore */ }
   }
 
@@ -151,6 +153,7 @@ function TLSStatusCard() {
     setSaving(true);
     try {
       const body: Record<string, string> = { mode };
+      if (mailHostname) body.hostname = mailHostname;
       if (mode === 'acme') {
         body.email = email;
         body.provider = 'cloudflare';
@@ -192,7 +195,7 @@ function TLSStatusCard() {
     return 'bg-red-500';
   }
 
-  const dirty = mode !== tlsInfo?.mode || (mode === 'acme' && (email !== (tlsInfo?.acme_email || '') || cfToken !== ''));
+  const dirty = mode !== tlsInfo?.mode || mailHostname !== (tlsInfo?.hostname || '') || (mode === 'acme' && (email !== (tlsInfo?.acme_email || '') || cfToken !== ''));
 
   return (
     <Card className="dark:bg-slate-800 col-span-1 sm:col-span-3">
@@ -210,6 +213,10 @@ function TLSStatusCard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Left: Mode config */}
           <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Mail Hostname</Label>
+              <Input className="h-8 text-sm" value={mailHostname} onChange={e => setMailHostname(e.target.value)} placeholder="mail.example.com" />
+            </div>
             <div>
               <Label className="text-xs">Mode</Label>
               <Select value={mode} onValueChange={setMode}>

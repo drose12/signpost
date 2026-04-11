@@ -177,4 +177,7 @@ var migrations = []string{
 	// Migration 9: Add encrypted Cloudflare API token to tls_config for ACME DNS-01.
 	`ALTER TABLE tls_config ADD COLUMN cf_token_enc TEXT;
 	 ALTER TABLE tls_config ADD COLUMN cf_token_nonce TEXT;`,
+
+	// Migration 10: Add mail_hostname setting for configurable SMTP/cert hostname.
+	`INSERT OR IGNORE INTO settings (key, value) VALUES ('mail_hostname', '');`,
 }

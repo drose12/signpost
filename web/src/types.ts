@@ -140,6 +140,7 @@ export interface QueueResponse {
 
 export interface TLSResponse {
   mode: string;
+  hostname?: string;
   acme_email?: string;
   acme_provider?: string;
   has_cf_token: boolean;
