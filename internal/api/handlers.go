@@ -1685,6 +1685,14 @@ type backupPayload struct {
 	Domains         []backupDomain    `json:"domains"`
 	SMTPUsers       []smtpUserExport  `json:"smtp_users"`
 	Settings        map[string]string `json:"settings"`
+	TLS             *tlsBackup        `json:"tls,omitempty"`
+}
+
+type tlsBackup struct {
+	Mode     string  `json:"mode"`
+	Email    *string `json:"email,omitempty"`
+	Provider *string `json:"provider,omitempty"`
+	CFToken  *string `json:"cf_token,omitempty"`
 }
 
 type backupDomain struct {
@@ -1778,12 +1786,29 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Export TLS config
+	var tlsBak *tlsBackup
+	tlsConfig, tlsErr := s.db.GetTLSConfig()
+	if tlsErr == nil && tlsConfig != nil {
+		tlsBak = &tlsBackup{
+			Mode:     tlsConfig.Mode,
+			Email:    tlsConfig.ACMEEmail,
+			Provider: tlsConfig.ACMEProvider,
+		}
+		if tlsConfig.CFTokenEnc != nil && tlsConfig.CFTokenNonce != nil {
+			if token, decErr := crypto.Decrypt(s.encKey, *tlsConfig.CFTokenEnc, *tlsConfig.CFTokenNonce); decErr == nil {
+				tlsBak.CFToken = &token
+			}
+		}
+	}
+
 	payload := backupPayload{
 		SignpostVersion: s.version,
 		ExportedAt:      time.Now().UTC().Format(time.RFC3339),
 		Domains:         exportDomains,
 		SMTPUsers:       exportUsers,
 		Settings:        settings,
+		TLS:             tlsBak,
 	}
 
 	data, err := json.MarshalIndent(payload, "", "  ")
@@ -1967,6 +1992,20 @@ func (s *Server) handleRestore(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.SetSetting(key, value); err != nil {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to set setting %q: %v", key, err))
 			return
+		}
+	}
+
+	// Restore TLS config
+	if payload.TLS != nil {
+		if err := s.db.UpdateTLSConfig(payload.TLS.Mode, payload.TLS.Email, payload.TLS.Provider, nil, nil); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("restoring TLS config: %v", err))
+			return
+		}
+		if payload.TLS.CFToken != nil && *payload.TLS.CFToken != "" {
+			enc, nonce, encErr := crypto.Encrypt(s.encKey, *payload.TLS.CFToken)
+			if encErr == nil {
+				s.db.UpdateTLSToken(enc, nonce)
+			}
 		}
 	}
 
