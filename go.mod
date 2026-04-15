@@ -1,6 +1,6 @@
 module github.com/drose-drcs/signpost
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/emersion/go-msgauth v0.7.0
@@ -8,4 +8,4 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.38
 )
 
-require golang.org/x/crypto v0.45.0
+require golang.org/x/crypto v0.50.0
