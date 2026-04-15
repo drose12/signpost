@@ -30,7 +30,7 @@ RUN CGO_ENABLED=1 go build -o signpost ./cmd/signpost/
 ###############################################################################
 # Stage 3: Final image based on Maddy
 ###############################################################################
-FROM foxcpp/maddy:0.9.2
+FROM foxcpp/maddy:0.9.3
 
 # Install s6-overlay for process management
 ARG S6_OVERLAY_VERSION=3.2.0.2
